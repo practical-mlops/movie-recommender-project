@@ -1,0 +1,4 @@
+bentoml
+torch
+mlflow
+numpy
