@@ -2,16 +2,18 @@
 # Name: model-training-pipeline
 # Description: A pipeline to train models on the movielens dataset for recommenders
 # Inputs:
-#    hot_reload_model_id: str [Default: '']
+#    hot_reload_model_id: str [Default: 'none']
 #    minio_bucket: str [Default: 'datasets']
 #    mlflow_experiment_name: str [Default: 'recommender']
 #    mlflow_registered_model_name: str [Default: 'recommender_production']
+#    mlflow_uri: str [Default: 'http://192.168.1.90:8080']
 #    model_dropout_rate: float [Default: 0.2]
 #    model_embedding_factors: int [Default: 20.0]
 #    model_hidden_dims: int [Default: 256.0]
 #    model_promote_precision_threshold: float [Default: -0.3]
 #    model_promote_recall_threshold: float [Default: -0.2]
-#    model_promote_rms_threshold: float [Default: 0.0]
+#    model_promote_rms_threshold: float [Default: 0.0001]
+#    number_of_negative_samples: int [Default: 10.0]
 #    optimizer_gamma: float [Default: 0.1]
 #    optimizer_step_size: float [Default: 10.0]
 #    shuffle_testing_data: bool [Default: True]
@@ -91,6 +93,8 @@ components:
     executorLabel: exec-promote-model-to-staging
     inputDefinitions:
       parameters:
+        mlflow_uri:
+          parameterType: STRING
         model_run_id:
           parameterType: STRING
         precision_threshold:
@@ -136,6 +140,8 @@ components:
           parameterType: STRING
         mlflow_tags:
           parameterType: STRUCT
+        mlflow_uri:
+          parameterType: STRING
         model_dropout_rate:
           parameterType: NUMBER_DOUBLE
         model_embedding_factors:
@@ -173,6 +179,8 @@ components:
             schemaTitle: system.Dataset
             schemaVersion: 0.0.1
       parameters:
+        mlflow_uri:
+          parameterType: STRING
         model_run_id:
           parameterType: STRING
         threshold:
@@ -284,14 +292,14 @@ deploymentSpec:
         - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
           \ *\n\ndef get_dataset_metadata(bucket:str , dataset_name:str) -> Dict[str,\
           \ int]:\n    from pyarrow import fs, parquet\n    valid_splits = ['test',\
-          \ 'train', 'val']\n    data_map = {}\n    minio = fs.S3FileSystem(\n   \
-          \     endpoint_override='http://minio-service.kubeflow:9000',\n        \
-          \ access_key='minio',\n         secret_key='minio123',\n         scheme='http')\n\
-          \n    for valid_split in valid_splits:\n        paraquet_data = minio.open_input_file(f'{bucket}/{dataset_name}/{valid_split}.parquet.gzip')\n\
-          \        df = parquet.read_table(paraquet_data).to_pandas()\n        data_map['n_users']\
-          \ = max(data_map['n_users'], df.user_id.max())\n        data_map['n_items']\
-          \ = max(data_map['n_items'], df.item_id.max())\n        #if valid_split\
-          \ == split:\n        #    data_map[valid_split] = datasetReader(df, dataset_name=dataset_split)\n\
+          \ 'train', 'val']\n    data_map = {'n_users': 0, 'n_items': 0}\n    minio\
+          \ = fs.S3FileSystem(\n        endpoint_override='http://minio-service.kubeflow:9000',\n\
+          \         access_key='minio',\n         secret_key='minio123',\n       \
+          \  scheme='http')\n\n    for valid_split in valid_splits:\n        paraquet_data\
+          \ = minio.open_input_file(f'{bucket}/{dataset_name}/{valid_split}.parquet.gzip')\n\
+          \        df = parquet.read_table(paraquet_data).to_pandas()\n        print(df.head())\n\
+          \        data_map['n_users'] = max(data_map['n_users'], int(df.userId.max()))\n\
+          \        data_map['n_items'] = max(data_map['n_items'], int(df.movieId.max()))\n\
           \n    #assert list(data_map.keys()) == split, f\"Mismatched or invalid splits.\
           \ Received {split} but can only process {valid_splits}\"\n    return data_map\n\
           \n"
@@ -330,12 +338,12 @@ deploymentSpec:
           \         access_key='minio',\n         secret_key='minio123',\n       \
           \  scheme='http')\n    paraquet_data = minio.open_input_file(f'{bucket}/{dataset_name}/{split}.parquet.gzip')\n\
           \    ratings = parquet.read_table(paraquet_data).to_pandas()\n    item_pool\
-          \ = set(ratings['item_id'].unique())\n    interact_status = (\n\t\t\tratings.groupby('user_id')['item_id']\n\
-          \t\t\t.apply(set)\n\t\t\t.reset_index()\n\t\t\t.rename(columns={'item_id':\
+          \ = set(ratings['movieId'].unique())\n    interact_status = (\n\t\t\tratings.groupby('userId')['movieId']\n\
+          \t\t\t.apply(set)\n\t\t\t.reset_index()\n\t\t\t.rename(columns={'movieId':\
           \ 'interacted_items'}))\n    interact_status['negative_samples'] = interact_status['interacted_items'].apply(lambda\
           \ x: np.random.choice(list(item_pool - x), num_ng_test))\n    interact_status['rating']\
           \ = 0.0\n    interact_status['timestamp'] = 1051631039\n    interact_status\
-          \ = interact_status.drop(columns=['interacted_items']).explode('negative_samples').rename(columns={'negative_samples':'item_id'})\n\
+          \ = interact_status.drop(columns=['interacted_items']).explode('negative_samples').rename(columns={'negative_samples':'movieId'})\n\
           \    #ret = ratings.append(interact_status, ignore_index=True)\n    ret\
           \ = pd.concat([ratings, interact_status], ignore_index=True)\n    pd.to_pickle(ret,\
           \ negative_sampled_dataset.path)\n\n"
@@ -369,11 +377,11 @@ deploymentSpec:
         - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
           \ *\n\ndef promote_model_to_staging(\n    model_run_id: str, \n    registered_model_name:\
           \ str,\n    rms_threshold: float, \n    precision_threshold: float,\n  \
-          \  top_k: int,\n    recall_threshold: float):\n\n    import mlflow.pytorch\n\
-          \    import mlflow\n    from mlflow import MlflowClient\n    from mlflow.exceptions\
-          \ import RestException\n\n    mlflow.set_tracking_uri(uri=\"http://192.168.1.104:8080\"\
-          )\n    client = MlflowClient()\n\n    current_staging = None\n    try:\n\
-          \        current_staging = client.get_model_version_by_alias(registered_model_name,\
+          \  top_k: int,\n    recall_threshold: float,\n    mlflow_uri: str):\n\n\
+          \    import mlflow.pytorch\n    import mlflow\n    from mlflow import MlflowClient\n\
+          \    from mlflow.exceptions import RestException\n\n    mlflow.set_tracking_uri(uri=mlflow_uri)\n\
+          \    client = MlflowClient()\n\n    current_staging = None\n    try:\n \
+          \       current_staging = client.get_model_version_by_alias(registered_model_name,\
           \ \"staging\")\n    except RestException:\n        print(\"No staging model\
           \ found. Auto upgrade current run to staging.\")\n\n    if current_staging.run_id\
           \ == model_run_id:\n        print(\"Input run is already the current staging.\"\
@@ -456,32 +464,32 @@ deploymentSpec:
           '
         - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
           \ *\n\ndef train_model(mlflow_experiment_name: str, mlflow_run_id: str,\
-          \ mlflow_tags: dict,\n                hot_reload_model_run_id: str, training_data:\
-          \ Input[Dataset], training_data_metadata: Dict[str, int],\n            \
-          \    testing_data: Input[Dataset],\n                model_embedding_factors:\
-          \ int, model_learning_rate: float, model_hidden_dims: int, model_dropout_rate:\
-          \ float,\n                optimizer_step_size: float, optimizer_gamma: float,\n\
-          \                training_epochs: int,\n                train_batch_size:\
-          \ int, test_batch_size: int, shuffle_training_data: bool, shuffle_testing_data:\
-          \ bool) -> str:\n    input_params = {}\n    for k, v in locals().items():\n\
-          \        if k == 'input_params':\n            continue\n        input_params[k]\
-          \ = v\n    import torch\n    from torch.autograd import Variable\n    from\
-          \ torch.utils.data import DataLoader\n    import mlflow\n    from torchinfo\
-          \ import summary\n    from mlflow.models import infer_signature\n    from\
-          \ torch.utils.data import Dataset\n    import pandas as pd\n\n    class\
-          \ datasetReader(Dataset):\n        def __init__(self, df, dataset_name):\n\
-          \            self.df = df\n            self.name = dataset_name\n      \
-          \      print(f\"{self.name} : {self.df.shape[0]}\")\n\n        def __len__(self):\n\
-          \            return self.df.shape[0]\n\n        def __getitem__(self, idx):\n\
-          \            sd = self.df.iloc[idx]\n            user = sd['user_id']\n\
-          \            item = sd['item_id']\n            rating = sd['rating']\n \
-          \           return torch.tensor(user-1).long(), torch.tensor(item-1).long(),\
-          \ torch.tensor(rating).float()\n\n    class MatrixFactorization(torch.nn.Module):\n\
-          \        def __init__(self, n_users, n_items, n_factors, hidden_dim, dropout_rate):\n\
-          \            super().__init__()\n            self.n_items = n_items\n  \
-          \          self.user_factors = torch.nn.Embedding(n_users+1, \n        \
-          \                                       n_factors,\n                   \
-          \                            sparse=False)\n            self.item_factors\
+          \ mlflow_tags: dict, mlflow_uri: str,\n                hot_reload_model_run_id:\
+          \ str, training_data: Input[Dataset], training_data_metadata: Dict[str,\
+          \ int],\n                testing_data: Input[Dataset],\n               \
+          \ model_embedding_factors: int, model_learning_rate: float, model_hidden_dims:\
+          \ int, model_dropout_rate: float,\n                optimizer_step_size:\
+          \ float, optimizer_gamma: float,\n                training_epochs: int,\n\
+          \                train_batch_size: int, test_batch_size: int, shuffle_training_data:\
+          \ bool, shuffle_testing_data: bool) -> str:\n    input_params = {}\n   \
+          \ for k, v in locals().items():\n        if k == 'input_params':\n     \
+          \       continue\n        input_params[k] = v\n    import torch\n    from\
+          \ torch.autograd import Variable\n    from torch.utils.data import DataLoader\n\
+          \    import mlflow\n    from torchinfo import summary\n    from mlflow.models\
+          \ import infer_signature\n    from torch.utils.data import Dataset\n   \
+          \ import pandas as pd\n\n    class datasetReader(Dataset):\n        def\
+          \ __init__(self, df, dataset_name):\n            self.df = df\n        \
+          \    self.name = dataset_name\n            print(f\"{self.name} : {self.df.shape[0]}\"\
+          )\n\n        def __len__(self):\n            return self.df.shape[0]\n\n\
+          \        def __getitem__(self, idx):\n            sd = self.df.iloc[idx]\n\
+          \            user = sd['userId']\n            item = sd['movieId']\n   \
+          \         rating = sd['rating']\n            return torch.tensor(user-1).long(),\
+          \ torch.tensor(item-1).long(), torch.tensor(rating).float()\n\n    class\
+          \ MatrixFactorization(torch.nn.Module):\n        def __init__(self, n_users,\
+          \ n_items, n_factors, hidden_dim, dropout_rate):\n            super().__init__()\n\
+          \            self.n_items = n_items\n            self.user_factors = torch.nn.Embedding(n_users+1,\
+          \ \n                                               n_factors,\n        \
+          \                                       sparse=False)\n            self.item_factors\
           \ = torch.nn.Embedding(n_items+1, \n                                   \
           \            n_factors,\n                                              \
           \ sparse=False)\n\n            self.linear = torch.nn.Linear(in_features=n_factors,\
@@ -495,7 +503,8 @@ deploymentSpec:
           \            return rating\n\n    train_dataset = datasetReader(pd.read_pickle(training_data.path),\
           \ dataset_name='train')\n    test_dataset = datasetReader(pd.read_pickle(testing_data.path),\
           \ dataset_name='test')\n\n    n_users = training_data_metadata['n_users']\n\
-          \    n_items = training_data_metadata['n_items']\n\n    if hot_reload_model_run_id:\n\
+          \    n_items = training_data_metadata['n_items']\n\n    if hot_reload_model_run_id\
+          \ == 'none':\n        hot_reload_model_run_id = None\n\n    if hot_reload_model_run_id:\n\
           \        model_uri = f\"runs:/{hot_reload_model_run_id}/model\"\n      \
           \  model = mlflow.pytorch.load_model(model_uri)\n    else:\n        model\
           \ = MatrixFactorization(n_users, n_items, n_factors=model_embedding_factors,\
@@ -506,8 +515,8 @@ deploymentSpec:
           \ = DataLoader(train_dataset, batch_size=train_batch_size, shuffle=shuffle_training_data)\n\
           \    test_dataloader = DataLoader(test_dataset, batch_size=test_batch_size,\
           \ shuffle=shuffle_testing_data)\n\n    # Set our tracking server uri for\
-          \ logging\n    mlflow.set_tracking_uri(uri=\"http://192.168.1.104:8080\"\
-          )\n\n    # Create a new MLflow Experiment\n    mlflow.set_experiment(mlflow_experiment_name)\n\
+          \ logging\n    mlflow.set_tracking_uri(uri=mlflow_uri)\n\n    # Create a\
+          \ new MLflow Experiment\n    mlflow.set_experiment(mlflow_experiment_name)\n\
           \n    if mlflow_run_id == \"\":\n        mlflow_run_id = None\n\n    with\
           \ mlflow.start_run(run_id=mlflow_run_id) as run:\n        current_run_id\
           \ = run.info.run_id\n        for k,v in input_params.items():\n        \
@@ -575,14 +584,14 @@ deploymentSpec:
           '
         - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
           \ *\n\ndef validate_model(\n    model_run_id: str, \n    top_k: int,\n \
-          \   threshold: int,\n    val_batch_size: int,\n    validation_dataset: Input[Dataset]):\n\
-          \n    # https://pureai.substack.com/p/recommender-systems-with-pytorch\n\
+          \   threshold: int,\n    val_batch_size: int,\n    mlflow_uri: str, \n \
+          \   validation_dataset: Input[Dataset]):\n\n    # https://pureai.substack.com/p/recommender-systems-with-pytorch\n\
           \    from collections import defaultdict\n    import torch\n    import mlflow.pytorch\n\
           \    import mlflow\n    from sklearn.metrics import root_mean_squared_error\n\
           \    from torch.utils.data import DataLoader\n    import pandas as pd\n\n\
-          \    mlflow.set_tracking_uri(uri=\"http://192.168.1.104:8080\")\n\n    model_uri\
-          \ = f\"runs:/{model_run_id}/model\"\n    recommendation_model = mlflow.pytorch.load_model(model_uri)\n\
-          \    class datasetReader(Dataset):\n        def __init__(self, df, dataset_name):\n\
+          \    mlflow.set_tracking_uri(uri=mlflow_uri)\n\n    model_uri = f\"runs:/{model_run_id}/model\"\
+          \n    recommendation_model = mlflow.pytorch.load_model(model_uri)\n    class\
+          \ datasetReader(Dataset):\n        def __init__(self, df, dataset_name):\n\
           \            self.df = df\n            self.name = dataset_name\n      \
           \      print(f\"{self.name} : {self.df.shape[0]}\")\n\n        def __len__(self):\n\
           \            return self.df.shape[0]\n\n        def __getitem__(self, idx):\n\
@@ -625,8 +634,7 @@ root:
   dag:
     tasks:
       get-dataset:
-        cachingOptions:
-          enableCache: true
+        cachingOptions: {}
         componentRef:
           name: comp-get-dataset
         inputs:
@@ -641,8 +649,7 @@ root:
         taskInfo:
           name: get-test-data
       get-dataset-2:
-        cachingOptions:
-          enableCache: true
+        cachingOptions: {}
         componentRef:
           name: comp-get-dataset-2
         inputs:
@@ -657,8 +664,7 @@ root:
         taskInfo:
           name: get-validation-data
       get-dataset-metadata:
-        cachingOptions:
-          enableCache: true
+        cachingOptions: {}
         componentRef:
           name: comp-get-dataset-metadata
         dependentTasks:
@@ -672,8 +678,7 @@ root:
         taskInfo:
           name: get-dataset-metadata
       negative-sampling:
-        cachingOptions:
-          enableCache: true
+        cachingOptions: {}
         componentRef:
           name: comp-negative-sampling
         dependentTasks:
@@ -685,16 +690,14 @@ root:
             dataset_name:
               componentInputParameter: training_dataset_name
             num_ng_test:
-              runtimeValue:
-                constant: 10.0
+              componentInputParameter: number_of_negative_samples
             split:
               runtimeValue:
                 constant: train
         taskInfo:
           name: negative-sampling
       promote-model-to-staging:
-        cachingOptions:
-          enableCache: true
+        cachingOptions: {}
         componentRef:
           name: comp-promote-model-to-staging
         dependentTasks:
@@ -702,6 +705,8 @@ root:
         - validate-model
         inputs:
           parameters:
+            mlflow_uri:
+              componentInputParameter: mlflow_uri
             model_run_id:
               taskOutputParameter:
                 outputParameterKey: Output
@@ -719,8 +724,7 @@ root:
         taskInfo:
           name: promote-model-to-staging
       qa-data:
-        cachingOptions:
-          enableCache: true
+        cachingOptions: {}
         componentRef:
           name: comp-qa-data
         inputs:
@@ -728,10 +732,9 @@ root:
             bucket:
               componentInputParameter: minio_bucket
         taskInfo:
-          name: qa-data
+          name: qa-training-data
       train-model:
-        cachingOptions:
-          enableCache: true
+        cachingOptions: {}
         componentRef:
           name: comp-train-model
         dependentTasks:
@@ -759,6 +762,8 @@ root:
             mlflow_tags:
               runtimeValue:
                 constant: {}
+            mlflow_uri:
+              componentInputParameter: mlflow_uri
             model_dropout_rate:
               componentInputParameter: model_dropout_rate
             model_embedding_factors:
@@ -788,8 +793,7 @@ root:
         taskInfo:
           name: train-model
       validate-model:
-        cachingOptions:
-          enableCache: true
+        cachingOptions: {}
         componentRef:
           name: comp-validate-model
         dependentTasks:
@@ -802,6 +806,8 @@ root:
                 outputArtifactKey: output_dataset
                 producerTask: get-dataset-2
           parameters:
+            mlflow_uri:
+              componentInputParameter: mlflow_uri
             model_run_id:
               taskOutputParameter:
                 outputParameterKey: Output
@@ -817,7 +823,7 @@ root:
   inputDefinitions:
     parameters:
       hot_reload_model_id:
-        defaultValue: ''
+        defaultValue: none
         isOptional: true
         parameterType: STRING
       minio_bucket:
@@ -830,6 +836,10 @@ root:
         parameterType: STRING
       mlflow_registered_model_name:
         defaultValue: recommender_production
+        isOptional: true
+        parameterType: STRING
+      mlflow_uri:
+        defaultValue: http://192.168.1.90:8080
         isOptional: true
         parameterType: STRING
       model_dropout_rate:
@@ -853,9 +863,13 @@ root:
         isOptional: true
         parameterType: NUMBER_DOUBLE
       model_promote_rms_threshold:
-        defaultValue: 0.0
+        defaultValue: 0.0001
         isOptional: true
         parameterType: NUMBER_DOUBLE
+      number_of_negative_samples:
+        defaultValue: 10.0
+        isOptional: true
+        parameterType: NUMBER_INTEGER
       optimizer_gamma:
         defaultValue: 0.1
         isOptional: true

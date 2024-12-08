@@ -7,14 +7,15 @@ def promote_model_to_staging(
     rms_threshold: float, 
     precision_threshold: float,
     top_k: int,
-    recall_threshold: float):
+    recall_threshold: float,
+    mlflow_uri: str):
 
     import mlflow.pytorch
     import mlflow
     from mlflow import MlflowClient
     from mlflow.exceptions import RestException
 
-    mlflow.set_tracking_uri(uri="http://192.168.1.104:8080")
+    mlflow.set_tracking_uri(uri=mlflow_uri)
     client = MlflowClient()
 
     current_staging = None

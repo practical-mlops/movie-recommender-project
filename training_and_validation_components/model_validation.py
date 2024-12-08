@@ -7,6 +7,7 @@ def validate_model(
     top_k: int,
     threshold: int,
     val_batch_size: int,
+    mlflow_uri: str, 
     validation_dataset: Input[Dataset]):
 
     # https://pureai.substack.com/p/recommender-systems-with-pytorch
@@ -18,7 +19,7 @@ def validate_model(
     from torch.utils.data import DataLoader
     import pandas as pd
 
-    mlflow.set_tracking_uri(uri="http://192.168.1.104:8080")
+    mlflow.set_tracking_uri(uri=mlflow_uri)
 
     model_uri = f"runs:/{model_run_id}/model"
     recommendation_model = mlflow.pytorch.load_model(model_uri)

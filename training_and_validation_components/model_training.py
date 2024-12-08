@@ -2,7 +2,7 @@ from kfp.dsl import component, Input, Dataset
 from typing import Dict, Optional
 
 @component(packages_to_install=["torch", "torchvision", "torchaudio", "mlflow"], pip_index_urls=["https://download.pytorch.org/whl/cpu"])
-def train_model(mlflow_experiment_name: str, mlflow_run_id: str, mlflow_tags: dict,
+def train_model(mlflow_experiment_name: str, mlflow_run_id: str, mlflow_tags: dict, mlflow_uri: str,
                 hot_reload_model_run_id: str, training_data: Input[Dataset], training_data_metadata: Dict[str, int],
                 testing_data: Input[Dataset],
                 model_embedding_factors: int, model_learning_rate: float, model_hidden_dims: int, model_dropout_rate: float,
@@ -34,8 +34,8 @@ def train_model(mlflow_experiment_name: str, mlflow_run_id: str, mlflow_tags: di
 
         def __getitem__(self, idx):
             sd = self.df.iloc[idx]
-            user = sd['user_id']
-            item = sd['item_id']
+            user = sd['userId']
+            item = sd['movieId']
             rating = sd['rating']
             return torch.tensor(user-1).long(), torch.tensor(item-1).long(), torch.tensor(rating).float()
     
@@ -70,6 +70,9 @@ def train_model(mlflow_experiment_name: str, mlflow_run_id: str, mlflow_tags: di
     n_users = training_data_metadata['n_users']
     n_items = training_data_metadata['n_items']
 
+    if hot_reload_model_run_id == 'none':
+        hot_reload_model_run_id = None
+
     if hot_reload_model_run_id:
         model_uri = f"runs:/{hot_reload_model_run_id}/model"
         model = mlflow.pytorch.load_model(model_uri)
@@ -83,7 +86,7 @@ def train_model(mlflow_experiment_name: str, mlflow_run_id: str, mlflow_tags: di
     test_dataloader = DataLoader(test_dataset, batch_size=test_batch_size, shuffle=shuffle_testing_data)
 
     # Set our tracking server uri for logging
-    mlflow.set_tracking_uri(uri="http://192.168.1.104:8080")
+    mlflow.set_tracking_uri(uri=mlflow_uri)
 
     # Create a new MLflow Experiment
     mlflow.set_experiment(mlflow_experiment_name)

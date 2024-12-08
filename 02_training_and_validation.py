@@ -2,7 +2,7 @@ import kfp.dsl as dsl
 import kfp
 
 from data_components import qa_data
-from training_and_validation import (
+from training_and_validation_components import (
     negative_sampling, get_dataset_metadata,
     get_dataset,
     promote_model_to_staging,
@@ -16,6 +16,7 @@ from training_and_validation import (
 )
 def training_pipeline(
     minio_bucket:str='datasets',
+    number_of_negative_samples: int = 10,
     training_dataset_name:str = 'ml-25m',
     training_batch_size: int = 64,
     training_learning_rate:float = 0.001,
@@ -28,37 +29,38 @@ def training_pipeline(
     testing_batch_size: int = 64,
     shuffle_training_data:bool =True,
     shuffle_testing_data:bool =True,
-    hot_reload_model_id: str = '',
+    hot_reload_model_id: str = 'none',
     validation_top_k:int = 50,
     validation_threshold:int = 3,
     validation_batch_size: int = 32,
-    model_promote_rms_threshold: float = 0.0,
+    model_promote_rms_threshold: float = 0.0001,
     model_promote_precision_threshold: float = -0.3,
     model_promote_recall_threshold:float = -0.2,
     mlflow_experiment_name: str = 'recommender',
-    mlflow_registered_model_name: str = 'recommender_production'):
+    mlflow_registered_model_name: str = 'recommender_production',
+    mlflow_uri: str='http://192.168.1.90:8080'):
     
-    qa_op = qa_data(bucket=minio_bucket)
+    qa_op = qa_data(bucket=minio_bucket).set_display_name("qa-training-data").set_caching_options(False)
     
     dataset_metadata = get_dataset_metadata(
                     bucket=minio_bucket,
-                    dataset_name=training_dataset_name).after(qa_op)
+                    dataset_name=training_dataset_name).after(qa_op).set_caching_options(False)
     
     negative_sampled_data = negative_sampling(
                     bucket=minio_bucket,
                     dataset_name=training_dataset_name,
                     split='train', 
-                    num_ng_test=10).after(dataset_metadata)
+                    num_ng_test=number_of_negative_samples).after(dataset_metadata).set_caching_options(False)
     
     test_data = get_dataset(
                     bucket=minio_bucket,
                     dataset_name=training_dataset_name,
-                    split='test').set_display_name("get-test-data")
+                    split='test').set_display_name("get-test-data").set_caching_options(False)
     
     val_data = get_dataset(
                     bucket=minio_bucket,
                     dataset_name=training_dataset_name,
-                    split='val').set_display_name("get-validation-data")
+                    split='val').set_display_name("get-validation-data").set_caching_options(False)
     
     training = train_model(
         mlflow_experiment_name=mlflow_experiment_name,
@@ -78,14 +80,16 @@ def training_pipeline(
         training_data_metadata=dataset_metadata.output,
         testing_data=test_data.outputs['output_dataset'],
         shuffle_training_data=shuffle_training_data,
-        shuffle_testing_data=shuffle_testing_data).after(negative_sampled_data)
+        shuffle_testing_data=shuffle_testing_data,
+        mlflow_uri=mlflow_uri).after(negative_sampled_data).set_caching_options(False)
     
     val = validate_model(
         model_run_id=training.output,
         top_k=validation_top_k,
         threshold=validation_threshold,
         val_batch_size=validation_batch_size,
-        validation_dataset=val_data.outputs['output_dataset']).after(training)
+        validation_dataset=val_data.outputs['output_dataset'],
+        mlflow_uri=mlflow_uri).after(training).set_caching_options(False)
     
     promote_model_to_staging(
         model_run_id=training.output,
@@ -93,7 +97,8 @@ def training_pipeline(
         top_k=validation_top_k,
         rms_threshold=model_promote_rms_threshold,
         precision_threshold=model_promote_precision_threshold,
-        recall_threshold=model_promote_recall_threshold).after(val)
+        recall_threshold=model_promote_recall_threshold,
+        mlflow_uri=mlflow_uri).after(val).set_caching_options(False)
 
 if __name__ == "__main__":
     kfp.compiler.Compiler().compile(
