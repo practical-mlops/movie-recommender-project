@@ -1,0 +1,524 @@
+# PIPELINE DEFINITION
+# Name: data-prep-pipeline
+# Description: A pipeline that retrieves data from movielens and ingests it into paraquet files on minio
+# Inputs:
+#    minio_bucket: str [Default: 'datasets']
+#    random_init: int [Default: 42.0]
+components:
+  comp-csv-to-parquet:
+    executorLabel: exec-csv-to-parquet
+    inputDefinitions:
+      parameters:
+        inputFile:
+          parameterType: STRING
+    outputDefinitions:
+      parameters:
+        output_path:
+          parameterType: STRING
+  comp-csv-to-parquet-2:
+    executorLabel: exec-csv-to-parquet-2
+    inputDefinitions:
+      parameters:
+        inputFile:
+          parameterType: STRING
+    outputDefinitions:
+      parameters:
+        output_path:
+          parameterType: STRING
+  comp-download-ml25m-data:
+    executorLabel: exec-download-ml25m-data
+    outputDefinitions:
+      parameters:
+        output_path:
+          parameterType: STRING
+  comp-put-to-minio:
+    executorLabel: exec-put-to-minio
+    inputDefinitions:
+      parameters:
+        bucket:
+          defaultValue: datasets
+          isOptional: true
+          parameterType: STRING
+        inputFile:
+          parameterType: STRING
+        upload_file_name:
+          defaultValue: ''
+          isOptional: true
+          parameterType: STRING
+  comp-put-to-minio-2:
+    executorLabel: exec-put-to-minio-2
+    inputDefinitions:
+      parameters:
+        bucket:
+          defaultValue: datasets
+          isOptional: true
+          parameterType: STRING
+        inputFile:
+          parameterType: STRING
+        upload_file_name:
+          defaultValue: ''
+          isOptional: true
+          parameterType: STRING
+  comp-qa-data:
+    executorLabel: exec-qa-data
+    inputDefinitions:
+      parameters:
+        bucket:
+          defaultValue: datasets
+          isOptional: true
+          parameterType: STRING
+        dataset:
+          defaultValue: ml-25m
+          isOptional: true
+          parameterType: STRING
+  comp-split-dataset:
+    executorLabel: exec-split-dataset
+    inputDefinitions:
+      parameters:
+        input_parquet:
+          parameterType: STRING
+        random_state:
+          defaultValue: 42.0
+          isOptional: true
+          parameterType: NUMBER_INTEGER
+    outputDefinitions:
+      parameters:
+        dataset_path:
+          parameterType: STRING
+  comp-unzip-data:
+    executorLabel: exec-unzip-data
+    inputDefinitions:
+      parameters:
+        input_path:
+          parameterType: STRING
+    outputDefinitions:
+      parameters:
+        movies_output_path:
+          parameterType: STRING
+        ratings_output_path:
+          parameterType: STRING
+deploymentSpec:
+  executors:
+    exec-csv-to-parquet:
+      container:
+        args:
+        - --executor_input
+        - '{{$}}'
+        - --function_to_execute
+        - csv_to_parquet
+        command:
+        - sh
+        - -c
+        - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
+          \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
+          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.10.1'\
+          \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"'  &&\
+          \  python3 -m pip install --quiet --no-warn-script-location 'pandas' 'fastparquet'\
+          \ && \"$0\" \"$@\"\n"
+        - sh
+        - -ec
+        - 'program_path=$(mktemp -d)
+
+
+          printf "%s" "$0" > "$program_path/ephemeral_component.py"
+
+          _KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+
+          '
+        - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
+          \ *\n\ndef csv_to_parquet(inputFile: dsl.InputPath(str), output_path: dsl.OutputPath(str)):\n\
+          \    import pandas as pd\n    df = pd.read_csv(inputFile, index_col=False)\n\
+          \    df.to_parquet(output_path, compression='gzip') \n\n"
+        image: python:3.9
+    exec-csv-to-parquet-2:
+      container:
+        args:
+        - --executor_input
+        - '{{$}}'
+        - --function_to_execute
+        - csv_to_parquet
+        command:
+        - sh
+        - -c
+        - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
+          \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
+          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.10.1'\
+          \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"'  &&\
+          \  python3 -m pip install --quiet --no-warn-script-location 'pandas' 'fastparquet'\
+          \ && \"$0\" \"$@\"\n"
+        - sh
+        - -ec
+        - 'program_path=$(mktemp -d)
+
+
+          printf "%s" "$0" > "$program_path/ephemeral_component.py"
+
+          _KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+
+          '
+        - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
+          \ *\n\ndef csv_to_parquet(inputFile: dsl.InputPath(str), output_path: dsl.OutputPath(str)):\n\
+          \    import pandas as pd\n    df = pd.read_csv(inputFile, index_col=False)\n\
+          \    df.to_parquet(output_path, compression='gzip') \n\n"
+        image: python:3.9
+    exec-download-ml25m-data:
+      container:
+        args:
+        - --executor_input
+        - '{{$}}'
+        - --function_to_execute
+        - download_ml25m_data
+        command:
+        - sh
+        - -c
+        - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
+          \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
+          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.10.1'\
+          \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"'  &&\
+          \  python3 -m pip install --quiet --no-warn-script-location 'requests' 'tqdm'\
+          \ && \"$0\" \"$@\"\n"
+        - sh
+        - -ec
+        - 'program_path=$(mktemp -d)
+
+
+          printf "%s" "$0" > "$program_path/ephemeral_component.py"
+
+          _KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+
+          '
+        - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
+          \ *\n\ndef download_ml25m_data(output_path: dsl.OutputPath(str)):\n    import\
+          \ requests\n    from tqdm import tqdm\n    url = 'https://files.grouplens.org/datasets/movielens/ml-25m.zip'\n\
+          \    response = requests.get(url, stream=True, verify=False)\n    file_size\
+          \ = int(response.headers.get(\"Content-Length\", 0))\n    progress_bar =\
+          \ tqdm(total=file_size, unit=\"B\", unit_scale=True)\n    print(output_path)\n\
+          \    with open(output_path, 'wb') as file: \n        for chunk in response.iter_content(chunk_size=1024*2):\
+          \ #D\n            # Update the progress bar with the size of the downloaded\
+          \ chunk #D\n            progress_bar.update(len(chunk)) #D\n           \
+          \ file.write(chunk)\n\n"
+        image: python:3.9
+    exec-put-to-minio:
+      container:
+        args:
+        - --executor_input
+        - '{{$}}'
+        - --function_to_execute
+        - put_to_minio
+        command:
+        - sh
+        - -c
+        - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
+          \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
+          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.10.1'\
+          \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"'  &&\
+          \  python3 -m pip install --quiet --no-warn-script-location 'boto3' && \"\
+          $0\" \"$@\"\n"
+        - sh
+        - -ec
+        - 'program_path=$(mktemp -d)
+
+
+          printf "%s" "$0" > "$program_path/ephemeral_component.py"
+
+          _KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+
+          '
+        - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
+          \ *\n\ndef put_to_minio(inputFile: dsl.InputPath(str), upload_file_name:str='',\
+          \ bucket: str='datasets'):\n    import boto3\n    import os\n    minio_client\
+          \ = boto3.client(                          \n        's3',             \
+          \                                 \n        endpoint_url='http://minio-service.kubeflow:9000',\n\
+          \        aws_access_key_id='minio',\n        aws_secret_access_key='minio123')\
+          \ \n    try:\n        minio_client.create_bucket(Bucket=bucket)\n    except\
+          \ Exception as e:\n        # Bucket already created.\n        pass\n   \
+          \ if os.path.isdir(inputFile):\n        for file in os.listdir(inputFile):\n\
+          \            s3_path = os.path.join('ml-25m', file)\n            minio_client.upload_file(os.path.join(inputFile,\
+          \ file), bucket, s3_path)\n    else:\n        if upload_file_name == '':\n\
+          \            _, file = os.path.split(inputFile)\n        else:\n       \
+          \     file = upload_file_name\n        s3_path = os.path.join('ml-25m',\
+          \ file)\n        minio_client.upload_file(inputFile, bucket, s3_path)\n\n"
+        image: python:3.9
+    exec-put-to-minio-2:
+      container:
+        args:
+        - --executor_input
+        - '{{$}}'
+        - --function_to_execute
+        - put_to_minio
+        command:
+        - sh
+        - -c
+        - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
+          \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
+          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.10.1'\
+          \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"'  &&\
+          \  python3 -m pip install --quiet --no-warn-script-location 'boto3' && \"\
+          $0\" \"$@\"\n"
+        - sh
+        - -ec
+        - 'program_path=$(mktemp -d)
+
+
+          printf "%s" "$0" > "$program_path/ephemeral_component.py"
+
+          _KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+
+          '
+        - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
+          \ *\n\ndef put_to_minio(inputFile: dsl.InputPath(str), upload_file_name:str='',\
+          \ bucket: str='datasets'):\n    import boto3\n    import os\n    minio_client\
+          \ = boto3.client(                          \n        's3',             \
+          \                                 \n        endpoint_url='http://minio-service.kubeflow:9000',\n\
+          \        aws_access_key_id='minio',\n        aws_secret_access_key='minio123')\
+          \ \n    try:\n        minio_client.create_bucket(Bucket=bucket)\n    except\
+          \ Exception as e:\n        # Bucket already created.\n        pass\n   \
+          \ if os.path.isdir(inputFile):\n        for file in os.listdir(inputFile):\n\
+          \            s3_path = os.path.join('ml-25m', file)\n            minio_client.upload_file(os.path.join(inputFile,\
+          \ file), bucket, s3_path)\n    else:\n        if upload_file_name == '':\n\
+          \            _, file = os.path.split(inputFile)\n        else:\n       \
+          \     file = upload_file_name\n        s3_path = os.path.join('ml-25m',\
+          \ file)\n        minio_client.upload_file(inputFile, bucket, s3_path)\n\n"
+        image: python:3.9
+    exec-qa-data:
+      container:
+        args:
+        - --executor_input
+        - '{{$}}'
+        - --function_to_execute
+        - qa_data
+        command:
+        - sh
+        - -c
+        - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
+          \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
+          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.10.1'\
+          \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"'  &&\
+          \  python3 -m pip install --quiet --no-warn-script-location 'pyarrow' 'pandas'\
+          \ && \"$0\" \"$@\"\n"
+        - sh
+        - -ec
+        - 'program_path=$(mktemp -d)
+
+
+          printf "%s" "$0" > "$program_path/ephemeral_component.py"
+
+          _KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+
+          '
+        - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
+          \ *\n\ndef qa_data(bucket:str = 'datasets', dataset:str = 'ml-25m'):\n \
+          \   from pyarrow import fs, parquet\n    print(\"Running QA\")\n    minio\
+          \ = fs.S3FileSystem(\n        endpoint_override='http://minio-service.kubeflow:9000',\n\
+          \         access_key='minio',\n         secret_key='minio123',\n       \
+          \  scheme='http')\n    train_parquet = minio.open_input_file(f'{bucket}/{dataset}/train.parquet.gzip')\n\
+          \    df = parquet.read_table(train_parquet).to_pandas()\n    assert df.shape[1]\
+          \ == 4\n    assert df.shape[0] >= 0.75 * 25 * 1e6\n    print('QA passed!')\n\
+          \n"
+        image: python:3.9
+    exec-split-dataset:
+      container:
+        args:
+        - --executor_input
+        - '{{$}}'
+        - --function_to_execute
+        - split_dataset
+        command:
+        - sh
+        - -c
+        - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
+          \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
+          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.10.1'\
+          \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"'  &&\
+          \  python3 -m pip install --quiet --no-warn-script-location 'scikit-learn'\
+          \ 'pandas' 'fastparquet' && \"$0\" \"$@\"\n"
+        - sh
+        - -ec
+        - 'program_path=$(mktemp -d)
+
+
+          printf "%s" "$0" > "$program_path/ephemeral_component.py"
+
+          _KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+
+          '
+        - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
+          \ *\n\ndef split_dataset(input_parquet: dsl.InputPath(str), dataset_path:\
+          \ dsl.OutputPath(str), random_state: int = 42):\n    from sklearn.model_selection\
+          \ import train_test_split\n    import os\n    import pandas as pd\n    train_ratio\
+          \ = 0.75\n    validation_ratio = 0.15\n    test_ratio = 0.10\n    ratings_df\
+          \ = pd.read_parquet(input_parquet)\n\n    # train is now 75% of the entire\
+          \ data set\n    train, test = train_test_split(\n        ratings_df,   \
+          \                                 \n        test_size=1 - train_ratio,\n\
+          \        random_state=random_state)\n\n    # test is now 10% of the initial\
+          \ data set\n    # validation is now 15% of the initial data set\n    val,\
+          \ test = train_test_split(   \n        test,\n        test_size=test_ratio\
+          \ / (test_ratio + validation_ratio),\n        random_state=random_state)\n\
+          \    os.mkdir(dataset_path)\n    train.to_parquet(os.path.join(dataset_path,\
+          \ 'train.parquet.gzip'), compression='gzip')\n    test.to_parquet(os.path.join(dataset_path,\
+          \ 'test.parquet.gzip'), compression='gzip')\n    val.to_parquet(os.path.join(dataset_path,\
+          \ 'val.parquet.gzip'), compression='gzip')\n\n"
+        image: python:3.9
+    exec-unzip-data:
+      container:
+        args:
+        - --executor_input
+        - '{{$}}'
+        - --function_to_execute
+        - unzip_data
+        command:
+        - sh
+        - -c
+        - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
+          \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
+          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.10.1'\
+          \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"' && \"\
+          $0\" \"$@\"\n"
+        - sh
+        - -ec
+        - 'program_path=$(mktemp -d)
+
+
+          printf "%s" "$0" > "$program_path/ephemeral_component.py"
+
+          _KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+
+          '
+        - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
+          \ *\n\ndef unzip_data(input_path: dsl.InputPath(str), ratings_output_path:\
+          \ dsl.OutputPath(str), movies_output_path: dsl.OutputPath(str)):\n    import\
+          \ zipfile\n\n    with zipfile.ZipFile(input_path, 'r') as z:\n        with\
+          \ open(ratings_output_path, 'wb') as f:\n            f.write(z.read('ml-25m/ratings.csv'))\n\
+          \        with open(movies_output_path, 'wb') as f:\n            f.write(z.read('ml-25m/movies.csv'))\n\
+          \n"
+        image: python:3.9
+pipelineInfo:
+  description: A pipeline that retrieves data from movielens and ingests it into paraquet
+    files on minio
+  name: data-prep-pipeline
+root:
+  dag:
+    tasks:
+      csv-to-parquet:
+        cachingOptions: {}
+        componentRef:
+          name: comp-csv-to-parquet
+        dependentTasks:
+        - unzip-data
+        inputs:
+          parameters:
+            inputFile:
+              taskOutputParameter:
+                outputParameterKey: ratings_output_path
+                producerTask: unzip-data
+        taskInfo:
+          name: csv-to-parquet
+      csv-to-parquet-2:
+        cachingOptions: {}
+        componentRef:
+          name: comp-csv-to-parquet-2
+        dependentTasks:
+        - unzip-data
+        inputs:
+          parameters:
+            inputFile:
+              taskOutputParameter:
+                outputParameterKey: movies_output_path
+                producerTask: unzip-data
+        taskInfo:
+          name: csv-to-parquet-2
+      download-ml25m-data:
+        cachingOptions: {}
+        componentRef:
+          name: comp-download-ml25m-data
+        taskInfo:
+          name: download-ml25m-data
+      put-to-minio:
+        cachingOptions: {}
+        componentRef:
+          name: comp-put-to-minio
+        dependentTasks:
+        - csv-to-parquet-2
+        inputs:
+          parameters:
+            bucket:
+              componentInputParameter: minio_bucket
+            inputFile:
+              taskOutputParameter:
+                outputParameterKey: output_path
+                producerTask: csv-to-parquet-2
+            upload_file_name:
+              runtimeValue:
+                constant: movies.parquet.gzip
+        taskInfo:
+          name: put-to-minio
+      put-to-minio-2:
+        cachingOptions: {}
+        componentRef:
+          name: comp-put-to-minio-2
+        dependentTasks:
+        - split-dataset
+        inputs:
+          parameters:
+            bucket:
+              componentInputParameter: minio_bucket
+            inputFile:
+              taskOutputParameter:
+                outputParameterKey: dataset_path
+                producerTask: split-dataset
+        taskInfo:
+          name: put-to-minio-2
+      qa-data:
+        cachingOptions: {}
+        componentRef:
+          name: comp-qa-data
+        dependentTasks:
+        - put-to-minio-2
+        inputs:
+          parameters:
+            bucket:
+              componentInputParameter: minio_bucket
+        taskInfo:
+          name: qa-data
+      split-dataset:
+        cachingOptions: {}
+        componentRef:
+          name: comp-split-dataset
+        dependentTasks:
+        - csv-to-parquet
+        inputs:
+          parameters:
+            input_parquet:
+              taskOutputParameter:
+                outputParameterKey: output_path
+                producerTask: csv-to-parquet
+            random_state:
+              componentInputParameter: random_init
+        taskInfo:
+          name: split-dataset
+      unzip-data:
+        cachingOptions: {}
+        componentRef:
+          name: comp-unzip-data
+        dependentTasks:
+        - download-ml25m-data
+        inputs:
+          parameters:
+            input_path:
+              taskOutputParameter:
+                outputParameterKey: output_path
+                producerTask: download-ml25m-data
+        taskInfo:
+          name: unzip-data
+  inputDefinitions:
+    parameters:
+      minio_bucket:
+        defaultValue: datasets
+        isOptional: true
+        parameterType: STRING
+      random_init:
+        defaultValue: 42.0
+        isOptional: true
+        parameterType: NUMBER_INTEGER
+schemaVersion: 2.1.0
+sdkVersion: kfp-2.10.1
