@@ -16,7 +16,7 @@ from data_components import (
 )
 def dataprep_pipeline(minio_bucket:str='datasets', random_init:int=42):
     download_dataset = download_ml25m_data()
-    unzip_folder = unzip_data(input_path=download_dataset.output)
+    unzip_folder = unzip_data(input_path=download_dataset.outputs['output_path_one'])
     ratings_parquet_op = csv_to_parquet(inputFile=unzip_folder.outputs['ratings_output_path'])
     movies_parquet_op = csv_to_parquet(inputFile=unzip_folder.outputs['movies_output_path'])
     split_op = split_dataset(input_parquet=ratings_parquet_op.output,random_state=random_init)

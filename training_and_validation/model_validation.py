@@ -1,3 +1,6 @@
+from kfp.dsl import component
+
+@component(packages_to_install=["torch", "torchvision", "torchaudio"], pip_index_urls=["https://download.pytorch.org/whl/cpu"])
 def validate_model(model_run_id, top_k=50, threshold=3, val_batch_size=32):
     # https://pureai.substack.com/p/recommender-systems-with-pytorch
     from collections import defaultdict

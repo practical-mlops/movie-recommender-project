@@ -1,8 +1,6 @@
-from kfp.dsl import Input, Output, Dataset, Artifact
-import pandas as pd
-from typing import Dict
-from typing import NamedTuple
+from kfp.dsl import Input, Output, Dataset, Artifact, component
 
+@component(packages_to_install=["scikit-learn", "pandas", "fastparquet"])
 def get_datasets(bucket:str , dataset_name:str , split: str, dataset: Output[Dataset]):
     from pyarrow import fs, parquet
     valid_splits = ['test', 'train', 'val']
@@ -24,7 +22,8 @@ def get_datasets(bucket:str , dataset_name:str , split: str, dataset: Output[Dat
     assert list(data_map.keys()) == split, f"Mismatched or invalid splits. Received {split} but can only process {valid_splits}"
     return data_map
 
-def negative_sampling(num_ng_test:int , input: Input[Dataset]) -> Output[Dataset]:
+@component(packages_to_install=["pandas"])
+def negative_sampling(num_ng_test:int , input: Input[Dataset], sampled_dataset: Output[Dataset]):
     import pandas as pd
     ratings = pd.read_pickle(input.path)
     item_pool = set(ratings['item_id'].unique())
@@ -39,4 +38,4 @@ def negative_sampling(num_ng_test:int , input: Input[Dataset]) -> Output[Dataset
     interact_status = interact_status.drop(columns=['interacted_items']).explode('negative_samples').rename(columns={'negative_samples':'item_id'})
     #ret = ratings.append(interact_status, ignore_index=True)
     ret = pd.concat([ratings, interact_status], ignore_index=True)
-    pd.to_pickle()
+    pd.to_pickle(ret, sampled_dataset.path)

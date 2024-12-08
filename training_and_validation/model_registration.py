@@ -1,4 +1,13 @@
-def promote_model_to_staging(model_run_id, registered_model_name='recommender_production', rms_threshold=0.0, precision_threshold=-0.3, recall_threshold=-0.2):
+from kfp.dsl import component
+
+@component(packages_to_install=["mlflow"])
+def promote_model_to_staging(
+    model_run_id, 
+    registered_model_name='recommender_production',
+    rms_threshold=0.0, 
+    precision_threshold=-0.3, 
+    recall_threshold=-0.2):
+
     import mlflow.pytorch
     import mlflow
     from mlflow import MlflowClient

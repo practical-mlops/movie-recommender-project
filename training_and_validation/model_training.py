@@ -1,12 +1,14 @@
 
-from sklearn.model_selection import train_test_split
-import pandas as pd
-import os
-import numpy as np
-from torch.utils.data import Dataset
-import torch
-from torch.utils.data import DataLoader
+#from sklearn.model_selection import train_test_split
+#import pandas as pd
+#import os
+#import numpy as np
+#from torch.utils.data import Dataset
+#import torch
+#from torch.utils.data import DataLoader
+from kfp.dsl import component
 
+@component(packages_to_install=["torch", "torchvision", "torchaudio", "mlflow"], pip_index_urls=["https://download.pytorch.org/whl/cpu"])
 def train_model(mlflow_experiment_name='recommender', mlflow_run_id=None, mlflow_tags={},
                 hot_reload_model_run_id=None,
                 model_embedding_factors=20, model_learning_rate=1e-3,model_hidden_dims=256, model_dropout_rate=0.2,
@@ -24,6 +26,7 @@ def train_model(mlflow_experiment_name='recommender', mlflow_run_id=None, mlflow
     import mlflow
     from torchinfo import summary
     from mlflow.models import infer_signature
+    from torch.utils.data import Dataset
 
     class datasetReader(Dataset):
         def __init__(self, df, dataset_name):
