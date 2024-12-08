@@ -3,7 +3,8 @@ import kfp
 
 from data_components import qa_data
 from training_and_validation import (
-    negative_sampling, get_datasets,
+    negative_sampling, get_dataset_metadata,
+    get_dataset,
     promote_model_to_staging,
     validate_model,
     train_model
@@ -27,7 +28,7 @@ def training_pipeline(
     testing_batch_size: int = 64,
     shuffle_training_data:bool =True,
     shuffle_testing_data:bool =True,
-    hot_reload_model_id: str | None = None,
+    hot_reload_model_id: str = '',
     validation_top_k:int = 50,
     validation_threshold:int = 3,
     validation_batch_size: int = 32,
@@ -39,28 +40,29 @@ def training_pipeline(
     
     qa_op = qa_data(bucket=minio_bucket)
     
-    train_data = get_datasets(
+    dataset_metadata = get_dataset_metadata(
                     bucket=minio_bucket,
-                    dataset=training_dataset_name,
-                    split='train').after(qa_op)
+                    dataset_name=training_dataset_name).after(qa_op)
     
-    test_data = get_datasets(
+    negative_sampled_data = negative_sampling(
                     bucket=minio_bucket,
-                    dataset=training_dataset_name,
-                    split='test').after(qa_op)
+                    dataset_name=training_dataset_name,
+                    split='train', 
+                    num_ng_test=10).after(dataset_metadata)
     
-    val_data =  get_datasets(
+    test_data = get_dataset(
                     bucket=minio_bucket,
-                    dataset=training_dataset_name,
-                    split='val').after(qa_op)
+                    dataset_name=training_dataset_name,
+                    split='test').set_display_name("get-test-data")
     
-    negative_sample_training = negative_sampling(
-                    num_ng_test=10,
-                    input=train_data.output).after(train_data)
+    val_data = get_dataset(
+                    bucket=minio_bucket,
+                    dataset_name=training_dataset_name,
+                    split='val').set_display_name("get-validation-data")
     
     training = train_model(
         mlflow_experiment_name=mlflow_experiment_name,
-        mlflow_run_id=None,
+        mlflow_run_id="",
         mlflow_tags={},
         hot_reload_model_run_id=hot_reload_model_id,
         model_embedding_factors=model_embedding_factors,
@@ -72,22 +74,23 @@ def training_pipeline(
         training_epochs=training_epochs,
         train_batch_size=training_batch_size,
         test_batch_size=testing_batch_size,
-        training_data=negative_sample_training.output,
-        testing_data=test_data.output,
+        training_data=negative_sampled_data.outputs['negative_sampled_dataset'],
+        training_data_metadata=dataset_metadata.output,
+        testing_data=test_data.outputs['output_dataset'],
         shuffle_training_data=shuffle_training_data,
-        shuffle_testing_data=shuffle_testing_data).after(negative_sample_training)
+        shuffle_testing_data=shuffle_testing_data).after(negative_sampled_data)
     
     val = validate_model(
         model_run_id=training.output,
         top_k=validation_top_k,
         threshold=validation_threshold,
         val_batch_size=validation_batch_size,
-        validation_dataset=val_data.output
-    ).after(training)
+        validation_dataset=val_data.outputs['output_dataset']).after(training)
     
     promote_model_to_staging(
         model_run_id=training.output,
         registered_model_name=mlflow_registered_model_name,
+        top_k=validation_top_k,
         rms_threshold=model_promote_rms_threshold,
         precision_threshold=model_promote_precision_threshold,
         recall_threshold=model_promote_recall_threshold).after(val)

@@ -2,11 +2,12 @@ from kfp.dsl import component
 
 @component(packages_to_install=["mlflow"])
 def promote_model_to_staging(
-    model_run_id, 
-    registered_model_name='recommender_production',
-    rms_threshold=0.0, 
-    precision_threshold=-0.3, 
-    recall_threshold=-0.2):
+    model_run_id: str, 
+    registered_model_name: str,
+    rms_threshold: float, 
+    precision_threshold: float,
+    top_k: int,
+    recall_threshold: float):
 
     import mlflow.pytorch
     import mlflow
@@ -36,10 +37,10 @@ def promote_model_to_staging(
         if (new_model_metrics['rms'] - staging_model_metrics['rms']) > rms_threshold:
             return
 
-        if (new_model_metrics['precision_50'] - staging_model_metrics['precision_50']) < precision_threshold:
+        if (new_model_metrics[f'precision_{top_k}'] - staging_model_metrics[f'precision_{top_k}']) < precision_threshold:
             return
         
-        if (new_model_metrics['recall_50'] - staging_model_metrics['recall_50']) < recall_threshold:
+        if (new_model_metrics[f'recall_{top_k}'] - staging_model_metrics[f'recall_{top_k}']) < recall_threshold:
             return
 
     result = mlflow.register_model(f"runs:/{model_run_id}/model", "recommender_production")

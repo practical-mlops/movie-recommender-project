@@ -1,20 +1,14 @@
-
-#from sklearn.model_selection import train_test_split
-#import pandas as pd
-#import os
-#import numpy as np
-#from torch.utils.data import Dataset
-#import torch
-#from torch.utils.data import DataLoader
-from kfp.dsl import component
+from kfp.dsl import component, Input, Dataset
+from typing import Dict, Optional
 
 @component(packages_to_install=["torch", "torchvision", "torchaudio", "mlflow"], pip_index_urls=["https://download.pytorch.org/whl/cpu"])
-def train_model(mlflow_experiment_name='recommender', mlflow_run_id=None, mlflow_tags={},
-                hot_reload_model_run_id=None,
-                model_embedding_factors=20, model_learning_rate=1e-3,model_hidden_dims=256, model_dropout_rate=0.2,
-                optimizer_step_size=10, optimizer_gamma=0.1,
-                training_epochs=30,
-                train_batch_size=64, test_batch_size=64, shuffle_training_data=True, shuffle_testing_data=True):
+def train_model(mlflow_experiment_name: str, mlflow_run_id: str, mlflow_tags: dict,
+                hot_reload_model_run_id: str, training_data: Input[Dataset], training_data_metadata: Dict[str, int],
+                testing_data: Input[Dataset],
+                model_embedding_factors: int, model_learning_rate: float, model_hidden_dims: int, model_dropout_rate: float,
+                optimizer_step_size: float, optimizer_gamma: float,
+                training_epochs: int,
+                train_batch_size: int, test_batch_size: int, shuffle_training_data: bool, shuffle_testing_data: bool) -> str:
     input_params = {}
     for k, v in locals().items():
         if k == 'input_params':
@@ -27,6 +21,7 @@ def train_model(mlflow_experiment_name='recommender', mlflow_run_id=None, mlflow
     from torchinfo import summary
     from mlflow.models import infer_signature
     from torch.utils.data import Dataset
+    import pandas as pd
 
     class datasetReader(Dataset):
         def __init__(self, df, dataset_name):
@@ -68,20 +63,24 @@ def train_model(mlflow_experiment_name='recommender', mlflow_run_id=None, mlflow
             x = self.dropout(x)
             rating = self.linear2(x)
             return rating
-    
-    dataset_map = get_datasets_local(split=['train', 'test'])
-    
-    if hot_reload_model_run_id is not None:
+
+    train_dataset = datasetReader(pd.read_pickle(training_data.path), dataset_name='train')
+    test_dataset = datasetReader(pd.read_pickle(testing_data.path), dataset_name='test')
+
+    n_users = training_data_metadata['n_users']
+    n_items = training_data_metadata['n_items']
+
+    if hot_reload_model_run_id:
         model_uri = f"runs:/{hot_reload_model_run_id}/model"
         model = mlflow.pytorch.load_model(model_uri)
     else:
-        model = MatrixFactorization(dataset_map['n_users'], dataset_map['n_items'], n_factors=model_embedding_factors, hidden_dim=model_hidden_dims, dropout_rate=model_dropout_rate)
+        model = MatrixFactorization(n_users, n_items, n_factors=model_embedding_factors, hidden_dim=model_hidden_dims, dropout_rate=model_dropout_rate)
 
     optimizer = torch.optim.SGD(model.parameters(), lr=model_learning_rate)
     scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=optimizer_step_size, gamma=optimizer_gamma)
     loss_func = torch.nn.L1Loss()
-    train_dataloader = DataLoader(dataset_map['train'], batch_size=train_batch_size, shuffle=shuffle_training_data)
-    test_dataloader = DataLoader(dataset_map['test'], batch_size=test_batch_size, shuffle=shuffle_testing_data)
+    train_dataloader = DataLoader(train_dataset, batch_size=train_batch_size, shuffle=shuffle_training_data)
+    test_dataloader = DataLoader(test_dataset, batch_size=test_batch_size, shuffle=shuffle_testing_data)
 
     # Set our tracking server uri for logging
     mlflow.set_tracking_uri(uri="http://192.168.1.104:8080")
@@ -89,14 +88,18 @@ def train_model(mlflow_experiment_name='recommender', mlflow_run_id=None, mlflow
     # Create a new MLflow Experiment
     mlflow.set_experiment(mlflow_experiment_name)
 
-    with mlflow.start_run(run_id=mlflow_run_id):
+    if mlflow_run_id == "":
+        mlflow_run_id = None
+
+    with mlflow.start_run(run_id=mlflow_run_id) as run:
+        current_run_id = run.info.run_id
         for k,v in input_params.items():
             if 'mlflow_' not in k:
                 mlflow.log_param(k, v)
         mlflow.log_param("loss_function", loss_func.__class__.__name__)
         #mlflow.log_param("metric_function", metric_fn.__class__.__name__,
         mlflow.log_param("optimizer", "SGD")
-        mlflow.log_params({'n_user': dataset_map['n_users'], 'n_items': dataset_map['n_items']})
+        mlflow.log_params({'n_user': n_users, 'n_items': n_items})
     
         for k,v in mlflow_tags.items():
             mlflow.set_tag(k, v)
@@ -150,3 +153,4 @@ def train_model(mlflow_experiment_name='recommender', mlflow_run_id=None, mlflow
             print(f"Train loss: {t_loss/t_count}")
 
         mlflow.pytorch.log_model(model, "model", signature=model_signature)
+    return current_run_id

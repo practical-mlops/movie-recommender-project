@@ -1,18 +1,42 @@
-from kfp.dsl import component
+from kfp.dsl import component, Input, Dataset
 
-@component(packages_to_install=["torch", "torchvision", "torchaudio"], pip_index_urls=["https://download.pytorch.org/whl/cpu"])
-def validate_model(model_run_id, top_k=50, threshold=3, val_batch_size=32):
+@component(packages_to_install=["scikit-metrics", "torch", "torchvision", "torchaudio", "mlflow", "pandas"],
+           pip_index_urls=["https://download.pytorch.org/whl/cpu"])
+def validate_model(
+    model_run_id: str, 
+    top_k: int,
+    threshold: int,
+    val_batch_size: int,
+    validation_dataset: Input[Dataset]):
+
     # https://pureai.substack.com/p/recommender-systems-with-pytorch
     from collections import defaultdict
     import torch
     import mlflow.pytorch
     import mlflow
-    from sklearn.metrics import mean_squared_error
+    from sklearn.metrics import root_mean_squared_error
+    from torch.utils.data import DataLoader
+    import pandas as pd
 
     mlflow.set_tracking_uri(uri="http://192.168.1.104:8080")
 
     model_uri = f"runs:/{model_run_id}/model"
     recommendation_model = mlflow.pytorch.load_model(model_uri)
+    class datasetReader(Dataset):
+        def __init__(self, df, dataset_name):
+            self.df = df
+            self.name = dataset_name
+            print(f"{self.name} : {self.df.shape[0]}")
+
+        def __len__(self):
+            return self.df.shape[0]
+
+        def __getitem__(self, idx):
+            sd = self.df.iloc[idx]
+            user = sd['user_id']
+            item = sd['item_id']
+            rating = sd['rating']
+            return torch.tensor(user-1).long(), torch.tensor(item-1).long(), torch.tensor(rating).float()
 
     def calculate_precision_recall(user_ratings, k, threshold):
         user_ratings.sort(key=lambda x: x[0], reverse=True)
@@ -26,8 +50,8 @@ def validate_model(model_run_id, top_k=50, threshold=3, val_batch_size=32):
 
     user_ratings_comparison = defaultdict(list)
 
-    dataset_map = get_datasets_local(split=['val'])
-    val_dataloader = DataLoader(dataset_map['val'], batch_size=val_batch_size, shuffle=True)
+    val_data = datasetReader(pd.read_pickle(validation_dataset.path), dataset_name='val')
+    val_dataloader = DataLoader(val_data, batch_size=val_batch_size, shuffle=True)
 
     y_pred = []
     y_true = []
@@ -57,7 +81,7 @@ def validate_model(model_run_id, top_k=50, threshold=3, val_batch_size=32):
 
     average_precision = sum(prec for prec in user_precisions.values()) / len(user_precisions)
     average_recall = sum(rec for rec in user_based_recalls.values()) / len(user_based_recalls)
-    rms = mean_squared_error(y_true, y_pred, squared=False)
+    rms = root_mean_squared_error(y_true, y_pred, squared=False)
 
     print(f"precision_{k}: {average_precision:.4f}")
     print(f"recall_{k}: {average_recall:.4f}")
