@@ -23,19 +23,28 @@ def get_dataset_metadata(bucket:str , dataset_name:str) -> Dict[str, int]:
     return data_map
 
 @component(packages_to_install=["pandas", "fastparquet", "numpy", "pyarrow"])
-def get_dataset(bucket: str, dataset_name: str, split: str, output_dataset: Output[Dataset]):
+def get_test_valid_dataset(bucket: str, dataset_name: str, testing_dataset: Output[Dataset], validation_dataset: Output[Dataset]):
     from pyarrow import fs, parquet
     import pandas as pd
 
-    assert split in ['test', 'train', 'val']
+    #assert split in ['test', 'train', 'val']
     minio = fs.S3FileSystem(
         endpoint_override='http://minio-service.kubeflow:9000',
          access_key='minio',
          secret_key='minio123',
          scheme='http')
-    paraquet_data = minio.open_input_file(f'{bucket}/{dataset_name}/{split}.parquet.gzip')
+    paraquet_data = minio.open_input_file(f'{bucket}/{dataset_name}/test.parquet.gzip')
     df = parquet.read_table(paraquet_data).to_pandas()
-    pd.to_pickle(df, output_dataset.path)
+    pd.to_pickle(df, testing_dataset.path)
+
+    print(df.head())
+
+    paraquet_data2 = minio.open_input_file(f'{bucket}/{dataset_name}/val.parquet.gzip')
+    df2 = parquet.read_table(paraquet_data2).to_pandas()
+    pd.to_pickle(df2, validation_dataset.path)
+
+    print(df2.head())
+
 
 
 @component(packages_to_install=["pandas", "fastparquet", "numpy", "pyarrow"])

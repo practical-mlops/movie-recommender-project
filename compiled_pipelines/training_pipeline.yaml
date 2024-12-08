@@ -27,38 +27,6 @@
 #    validation_threshold: int [Default: 3.0]
 #    validation_top_k: int [Default: 50.0]
 components:
-  comp-get-dataset:
-    executorLabel: exec-get-dataset
-    inputDefinitions:
-      parameters:
-        bucket:
-          parameterType: STRING
-        dataset_name:
-          parameterType: STRING
-        split:
-          parameterType: STRING
-    outputDefinitions:
-      artifacts:
-        output_dataset:
-          artifactType:
-            schemaTitle: system.Dataset
-            schemaVersion: 0.0.1
-  comp-get-dataset-2:
-    executorLabel: exec-get-dataset-2
-    inputDefinitions:
-      parameters:
-        bucket:
-          parameterType: STRING
-        dataset_name:
-          parameterType: STRING
-        split:
-          parameterType: STRING
-    outputDefinitions:
-      artifacts:
-        output_dataset:
-          artifactType:
-            schemaTitle: system.Dataset
-            schemaVersion: 0.0.1
   comp-get-dataset-metadata:
     executorLabel: exec-get-dataset-metadata
     inputDefinitions:
@@ -71,6 +39,24 @@ components:
       parameters:
         Output:
           parameterType: STRUCT
+  comp-get-test-valid-dataset:
+    executorLabel: exec-get-test-valid-dataset
+    inputDefinitions:
+      parameters:
+        bucket:
+          parameterType: STRING
+        dataset_name:
+          parameterType: STRING
+    outputDefinitions:
+      artifacts:
+        testing_dataset:
+          artifactType:
+            schemaTitle: system.Dataset
+            schemaVersion: 0.0.1
+        validation_dataset:
+          artifactType:
+            schemaTitle: system.Dataset
+            schemaVersion: 0.0.1
   comp-negative-sampling:
     executorLabel: exec-negative-sampling
     inputDefinitions:
@@ -191,78 +177,6 @@ components:
           parameterType: NUMBER_INTEGER
 deploymentSpec:
   executors:
-    exec-get-dataset:
-      container:
-        args:
-        - --executor_input
-        - '{{$}}'
-        - --function_to_execute
-        - get_dataset
-        command:
-        - sh
-        - -c
-        - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
-          \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
-          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.10.1'\
-          \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"'  &&\
-          \  python3 -m pip install --quiet --no-warn-script-location 'pandas' 'fastparquet'\
-          \ 'numpy' 'pyarrow' && \"$0\" \"$@\"\n"
-        - sh
-        - -ec
-        - 'program_path=$(mktemp -d)
-
-
-          printf "%s" "$0" > "$program_path/ephemeral_component.py"
-
-          _KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
-
-          '
-        - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
-          \ *\n\ndef get_dataset(bucket: str, dataset_name: str, split: str, output_dataset:\
-          \ Output[Dataset]):\n    from pyarrow import fs, parquet\n    import pandas\
-          \ as pd\n\n    assert split in ['test', 'train', 'val']\n    minio = fs.S3FileSystem(\n\
-          \        endpoint_override='http://minio-service.kubeflow:9000',\n     \
-          \    access_key='minio',\n         secret_key='minio123',\n         scheme='http')\n\
-          \    paraquet_data = minio.open_input_file(f'{bucket}/{dataset_name}/{split}.parquet.gzip')\n\
-          \    df = parquet.read_table(paraquet_data).to_pandas()\n    pd.to_pickle(df,\
-          \ output_dataset.path)\n\n"
-        image: python:3.9
-    exec-get-dataset-2:
-      container:
-        args:
-        - --executor_input
-        - '{{$}}'
-        - --function_to_execute
-        - get_dataset
-        command:
-        - sh
-        - -c
-        - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
-          \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
-          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.10.1'\
-          \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"'  &&\
-          \  python3 -m pip install --quiet --no-warn-script-location 'pandas' 'fastparquet'\
-          \ 'numpy' 'pyarrow' && \"$0\" \"$@\"\n"
-        - sh
-        - -ec
-        - 'program_path=$(mktemp -d)
-
-
-          printf "%s" "$0" > "$program_path/ephemeral_component.py"
-
-          _KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
-
-          '
-        - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
-          \ *\n\ndef get_dataset(bucket: str, dataset_name: str, split: str, output_dataset:\
-          \ Output[Dataset]):\n    from pyarrow import fs, parquet\n    import pandas\
-          \ as pd\n\n    assert split in ['test', 'train', 'val']\n    minio = fs.S3FileSystem(\n\
-          \        endpoint_override='http://minio-service.kubeflow:9000',\n     \
-          \    access_key='minio',\n         secret_key='minio123',\n         scheme='http')\n\
-          \    paraquet_data = minio.open_input_file(f'{bucket}/{dataset_name}/{split}.parquet.gzip')\n\
-          \    df = parquet.read_table(paraquet_data).to_pandas()\n    pd.to_pickle(df,\
-          \ output_dataset.path)\n\n"
-        image: python:3.9
     exec-get-dataset-metadata:
       container:
         args:
@@ -304,6 +218,45 @@ deploymentSpec:
           \ Received {split} but can only process {valid_splits}\"\n    return data_map\n\
           \n"
         image: python:3.9
+    exec-get-test-valid-dataset:
+      container:
+        args:
+        - --executor_input
+        - '{{$}}'
+        - --function_to_execute
+        - get_test_valid_dataset
+        command:
+        - sh
+        - -c
+        - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
+          \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
+          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.10.1'\
+          \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"'  &&\
+          \  python3 -m pip install --quiet --no-warn-script-location 'pandas' 'fastparquet'\
+          \ 'numpy' 'pyarrow' && \"$0\" \"$@\"\n"
+        - sh
+        - -ec
+        - 'program_path=$(mktemp -d)
+
+
+          printf "%s" "$0" > "$program_path/ephemeral_component.py"
+
+          _KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+
+          '
+        - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
+          \ *\n\ndef get_test_valid_dataset(bucket: str, dataset_name: str, testing_dataset:\
+          \ Output[Dataset], validation_dataset: Output[Dataset]):\n    from pyarrow\
+          \ import fs, parquet\n    import pandas as pd\n\n    #assert split in ['test',\
+          \ 'train', 'val']\n    minio = fs.S3FileSystem(\n        endpoint_override='http://minio-service.kubeflow:9000',\n\
+          \         access_key='minio',\n         secret_key='minio123',\n       \
+          \  scheme='http')\n    paraquet_data = minio.open_input_file(f'{bucket}/{dataset_name}/test.parquet.gzip')\n\
+          \    df = parquet.read_table(paraquet_data).to_pandas()\n    pd.to_pickle(df,\
+          \ testing_dataset.path)\n\n    print(df.head())\n\n    paraquet_data2 =\
+          \ minio.open_input_file(f'{bucket}/{dataset_name}/val.parquet.gzip')\n \
+          \   df2 = parquet.read_table(paraquet_data2).to_pandas()\n    pd.to_pickle(df2,\
+          \ validation_dataset.path)\n\n    print(df2.head())\n\n"
+        image: python:3.9
     exec-negative-sampling:
       container:
         args:
@@ -337,10 +290,12 @@ deploymentSpec:
           \    minio = fs.S3FileSystem(\n        endpoint_override='http://minio-service.kubeflow:9000',\n\
           \         access_key='minio',\n         secret_key='minio123',\n       \
           \  scheme='http')\n    paraquet_data = minio.open_input_file(f'{bucket}/{dataset_name}/{split}.parquet.gzip')\n\
-          \    ratings = parquet.read_table(paraquet_data).to_pandas()\n    item_pool\
-          \ = set(ratings['movieId'].unique())\n    interact_status = (\n\t\t\tratings.groupby('userId')['movieId']\n\
-          \t\t\t.apply(set)\n\t\t\t.reset_index()\n\t\t\t.rename(columns={'movieId':\
-          \ 'interacted_items'}))\n    interact_status['negative_samples'] = interact_status['interacted_items'].apply(lambda\
+          \    ratings = parquet.read_table(paraquet_data).to_pandas()\n    #for testing\n\
+          \    pd.to_pickle(ratings, negative_sampled_dataset.path)\n    return\n\
+          \    item_pool = set(ratings['movieId'].unique())\n    interact_status =\
+          \ (\n\t\t\tratings.groupby('userId')['movieId']\n\t\t\t.apply(set)\n\t\t\
+          \t.reset_index()\n\t\t\t.rename(columns={'movieId': 'interacted_items'}))\n\
+          \    interact_status['negative_samples'] = interact_status['interacted_items'].apply(lambda\
           \ x: np.random.choice(list(item_pool - x), num_ng_test))\n    interact_status['rating']\
           \ = 0.0\n    interact_status['timestamp'] = 1051631039\n    interact_status\
           \ = interact_status.drop(columns=['interacted_items']).explode('negative_samples').rename(columns={'negative_samples':'movieId'})\n\
@@ -447,11 +402,15 @@ deploymentSpec:
         - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
           \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
           \ python3 -m pip install --quiet --no-warn-script-location --index-url https://download.pytorch.org/whl/cpu\
-          \ --trusted-host https://download.pytorch.org/whl/cpu 'kfp==2.10.1' '--no-deps'\
+          \ --extra-index-url https://pypi.org/simple --extra-index-url https://pypi.python.org/simple\
+          \ --trusted-host https://download.pytorch.org/whl/cpu --trusted-host https://pypi.org/simple\
+          \ --trusted-host https://pypi.python.org/simple 'kfp==2.10.1' '--no-deps'\
           \ 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"'  &&  python3 -m\
           \ pip install --quiet --no-warn-script-location --index-url https://download.pytorch.org/whl/cpu\
-          \ --trusted-host https://download.pytorch.org/whl/cpu 'torch' 'torchvision'\
-          \ 'torchaudio' 'mlflow' && \"$0\" \"$@\"\n"
+          \ --extra-index-url https://pypi.org/simple --extra-index-url https://pypi.python.org/simple\
+          \ --trusted-host https://download.pytorch.org/whl/cpu --trusted-host https://pypi.org/simple\
+          \ --trusted-host https://pypi.python.org/simple 'torch' 'torchvision' 'torchaudio'\
+          \ 'mlflow' 'torchinfo' 'pandas' && \"$0\" \"$@\"\n"
         - sh
         - -ec
         - 'program_path=$(mktemp -d)
@@ -567,10 +526,14 @@ deploymentSpec:
         - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
           \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
           \ python3 -m pip install --quiet --no-warn-script-location --index-url https://download.pytorch.org/whl/cpu\
-          \ --trusted-host https://download.pytorch.org/whl/cpu 'kfp==2.10.1' '--no-deps'\
+          \ --extra-index-url https://pypi.org/simple --extra-index-url https://pypi.python.org/simple\
+          \ --trusted-host https://download.pytorch.org/whl/cpu --trusted-host https://pypi.org/simple\
+          \ --trusted-host https://pypi.python.org/simple 'kfp==2.10.1' '--no-deps'\
           \ 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"'  &&  python3 -m\
           \ pip install --quiet --no-warn-script-location --index-url https://download.pytorch.org/whl/cpu\
-          \ --trusted-host https://download.pytorch.org/whl/cpu 'scikit-metrics' 'torch'\
+          \ --extra-index-url https://pypi.org/simple --extra-index-url https://pypi.python.org/simple\
+          \ --trusted-host https://download.pytorch.org/whl/cpu --trusted-host https://pypi.org/simple\
+          \ --trusted-host https://pypi.python.org/simple 'scikit-metrics' 'torch'\
           \ 'torchvision' 'torchaudio' 'mlflow' 'pandas' && \"$0\" \"$@\"\n"
         - sh
         - -ec
@@ -633,38 +596,9 @@ pipelineInfo:
 root:
   dag:
     tasks:
-      get-dataset:
-        cachingOptions: {}
-        componentRef:
-          name: comp-get-dataset
-        inputs:
-          parameters:
-            bucket:
-              componentInputParameter: minio_bucket
-            dataset_name:
-              componentInputParameter: training_dataset_name
-            split:
-              runtimeValue:
-                constant: test
-        taskInfo:
-          name: get-test-data
-      get-dataset-2:
-        cachingOptions: {}
-        componentRef:
-          name: comp-get-dataset-2
-        inputs:
-          parameters:
-            bucket:
-              componentInputParameter: minio_bucket
-            dataset_name:
-              componentInputParameter: training_dataset_name
-            split:
-              runtimeValue:
-                constant: val
-        taskInfo:
-          name: get-validation-data
       get-dataset-metadata:
-        cachingOptions: {}
+        cachingOptions:
+          enableCache: true
         componentRef:
           name: comp-get-dataset-metadata
         dependentTasks:
@@ -677,8 +611,24 @@ root:
               componentInputParameter: training_dataset_name
         taskInfo:
           name: get-dataset-metadata
+      get-test-valid-dataset:
+        cachingOptions:
+          enableCache: true
+        componentRef:
+          name: comp-get-test-valid-dataset
+        dependentTasks:
+        - negative-sampling
+        inputs:
+          parameters:
+            bucket:
+              componentInputParameter: minio_bucket
+            dataset_name:
+              componentInputParameter: training_dataset_name
+        taskInfo:
+          name: get-test-valid-dataset
       negative-sampling:
-        cachingOptions: {}
+        cachingOptions:
+          enableCache: true
         componentRef:
           name: comp-negative-sampling
         dependentTasks:
@@ -724,7 +674,8 @@ root:
         taskInfo:
           name: promote-model-to-staging
       qa-data:
-        cachingOptions: {}
+        cachingOptions:
+          enableCache: true
         componentRef:
           name: comp-qa-data
         inputs:
@@ -738,15 +689,15 @@ root:
         componentRef:
           name: comp-train-model
         dependentTasks:
-        - get-dataset
         - get-dataset-metadata
+        - get-test-valid-dataset
         - negative-sampling
         inputs:
           artifacts:
             testing_data:
               taskOutputArtifact:
-                outputArtifactKey: output_dataset
-                producerTask: get-dataset
+                outputArtifactKey: testing_dataset
+                producerTask: get-test-valid-dataset
             training_data:
               taskOutputArtifact:
                 outputArtifactKey: negative_sampled_dataset
@@ -797,14 +748,14 @@ root:
         componentRef:
           name: comp-validate-model
         dependentTasks:
-        - get-dataset-2
+        - get-test-valid-dataset
         - train-model
         inputs:
           artifacts:
             validation_dataset:
               taskOutputArtifact:
-                outputArtifactKey: output_dataset
-                producerTask: get-dataset-2
+                outputArtifactKey: validation_dataset
+                producerTask: get-test-valid-dataset
           parameters:
             mlflow_uri:
               componentInputParameter: mlflow_uri

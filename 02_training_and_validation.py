@@ -4,7 +4,7 @@ import kfp
 from data_components import qa_data
 from training_and_validation_components import (
     negative_sampling, get_dataset_metadata,
-    get_dataset,
+    get_test_valid_dataset,
     promote_model_to_staging,
     validate_model,
     train_model
@@ -40,27 +40,21 @@ def training_pipeline(
     mlflow_registered_model_name: str = 'recommender_production',
     mlflow_uri: str='http://192.168.1.90:8080'):
     
-    qa_op = qa_data(bucket=minio_bucket).set_display_name("qa-training-data").set_caching_options(False)
+    qa_op = qa_data(bucket=minio_bucket).set_display_name("qa-training-data")
     
     dataset_metadata = get_dataset_metadata(
                     bucket=minio_bucket,
-                    dataset_name=training_dataset_name).after(qa_op).set_caching_options(False)
+                    dataset_name=training_dataset_name).after(qa_op)
     
     negative_sampled_data = negative_sampling(
                     bucket=minio_bucket,
                     dataset_name=training_dataset_name,
                     split='train', 
-                    num_ng_test=number_of_negative_samples).after(dataset_metadata).set_caching_options(False)
-    
-    test_data = get_dataset(
-                    bucket=minio_bucket,
-                    dataset_name=training_dataset_name,
-                    split='test').set_display_name("get-test-data").set_caching_options(False)
-    
-    val_data = get_dataset(
-                    bucket=minio_bucket,
-                    dataset_name=training_dataset_name,
-                    split='val').set_display_name("get-validation-data").set_caching_options(False)
+                    num_ng_test=number_of_negative_samples).after(dataset_metadata)
+
+    aux_data = get_test_valid_dataset(
+                bucket=minio_bucket,
+                dataset_name=training_dataset_name).after(negative_sampled_data)
     
     training = train_model(
         mlflow_experiment_name=mlflow_experiment_name,
@@ -78,7 +72,7 @@ def training_pipeline(
         test_batch_size=testing_batch_size,
         training_data=negative_sampled_data.outputs['negative_sampled_dataset'],
         training_data_metadata=dataset_metadata.output,
-        testing_data=test_data.outputs['output_dataset'],
+        testing_data=aux_data.outputs['testing_dataset'],
         shuffle_training_data=shuffle_training_data,
         shuffle_testing_data=shuffle_testing_data,
         mlflow_uri=mlflow_uri).after(negative_sampled_data).set_caching_options(False)
@@ -88,7 +82,7 @@ def training_pipeline(
         top_k=validation_top_k,
         threshold=validation_threshold,
         val_batch_size=validation_batch_size,
-        validation_dataset=val_data.outputs['output_dataset'],
+        validation_dataset=aux_data.outputs['validation_dataset'],
         mlflow_uri=mlflow_uri).after(training).set_caching_options(False)
     
     promote_model_to_staging(

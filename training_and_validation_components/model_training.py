@@ -1,7 +1,8 @@
 from kfp.dsl import component, Input, Dataset
 from typing import Dict, Optional
 
-@component(packages_to_install=["torch", "torchvision", "torchaudio", "mlflow"], pip_index_urls=["https://download.pytorch.org/whl/cpu"])
+@component(packages_to_install=["torch", "torchvision", "torchaudio", "mlflow", "torchinfo" ,"pandas"],
+           pip_index_urls=["https://download.pytorch.org/whl/cpu", "https://pypi.org/simple", "https://pypi.python.org/simple"])
 def train_model(mlflow_experiment_name: str, mlflow_run_id: str, mlflow_tags: dict, mlflow_uri: str,
                 hot_reload_model_run_id: str, training_data: Input[Dataset], training_data_metadata: Dict[str, int],
                 testing_data: Input[Dataset],

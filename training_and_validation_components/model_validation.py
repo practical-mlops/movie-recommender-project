@@ -1,7 +1,7 @@
 from kfp.dsl import component, Input, Dataset
 
 @component(packages_to_install=["scikit-metrics", "torch", "torchvision", "torchaudio", "mlflow", "pandas"],
-           pip_index_urls=["https://download.pytorch.org/whl/cpu"])
+           pip_index_urls=["https://download.pytorch.org/whl/cpu", "https://pypi.org/simple", "https://pypi.python.org/simple"])
 def validate_model(
     model_run_id: str, 
     top_k: int,
