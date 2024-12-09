@@ -82,7 +82,7 @@ def validate_model(
 
     average_precision = sum(prec for prec in user_precisions.values()) / len(user_precisions)
     average_recall = sum(rec for rec in user_based_recalls.values()) / len(user_based_recalls)
-    rms = root_mean_squared_error(y_true, y_pred, squared=False)
+    rms = root_mean_squared_error(y_true, y_pred)
 
     print(f"precision_{k}: {average_precision:.4f}")
     print(f"recall_{k}: {average_recall:.4f}")
