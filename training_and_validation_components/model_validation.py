@@ -34,8 +34,8 @@ def validate_model(
 
         def __getitem__(self, idx):
             sd = self.df.iloc[idx]
-            user = sd['user_id']
-            item = sd['item_id']
+            user = sd['userId']
+            item = sd['movieId']
             rating = sd['rating']
             return torch.tensor(user-1).long(), torch.tensor(item-1).long(), torch.tensor(rating).float()
 
