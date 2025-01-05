@@ -50,11 +50,11 @@ def training_pipeline(
                     bucket=minio_bucket,
                     dataset_name=training_dataset_name,
                     split='train', 
-                    num_ng_test=number_of_negative_samples).after(dataset_metadata)
+                    num_ng_test=number_of_negative_samples).after(dataset_metadata).set_caching_options(False)
 
     aux_data = get_test_valid_dataset(
                 bucket=minio_bucket,
-                dataset_name=training_dataset_name).after(negative_sampled_data)
+                dataset_name=training_dataset_name).after(negative_sampled_data).set_caching_options(False)
     
     training = train_model(
         mlflow_experiment_name=mlflow_experiment_name,
