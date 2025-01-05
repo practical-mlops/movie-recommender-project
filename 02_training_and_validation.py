@@ -18,15 +18,15 @@ def training_pipeline(
     minio_bucket:str='datasets',
     number_of_negative_samples: int = 10,
     training_dataset_name:str = 'ml-25m',
-    training_batch_size: int = 64,
+    training_batch_size: int = 32, #64
     training_learning_rate:float = 0.001,
-    model_embedding_factors: int = 20,
-    model_hidden_dims:int = 256,
+    model_embedding_factors: int = 5, #20
+    model_hidden_dims:int = 64, #256
     training_epochs:int = 30,
     optimizer_step_size: float= 10.0,
     optimizer_gamma: float = 0.1,
     model_dropout_rate:float = 0.2,
-    testing_batch_size: int = 64,
+    testing_batch_size: int = 32, #64
     shuffle_training_data:bool =True,
     shuffle_testing_data:bool =True,
     hot_reload_model_id: str = 'none',
@@ -50,11 +50,11 @@ def training_pipeline(
                     bucket=minio_bucket,
                     dataset_name=training_dataset_name,
                     split='train', 
-                    num_ng_test=number_of_negative_samples).after(dataset_metadata)
+                    num_ng_test=number_of_negative_samples).after(dataset_metadata).set_caching_options(False)
 
     aux_data = get_test_valid_dataset(
                 bucket=minio_bucket,
-                dataset_name=training_dataset_name).after(negative_sampled_data)
+                dataset_name=training_dataset_name).after(negative_sampled_data).set_caching_options(False)
     
     training = train_model(
         mlflow_experiment_name=mlflow_experiment_name,

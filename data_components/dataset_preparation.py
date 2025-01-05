@@ -2,10 +2,18 @@ import kfp.components as comp
 from kfp import dsl
 from kfp.dsl import Input, Output, Model, Dataset, OutputPath, Artifact
 
-@dsl.component(packages_to_install=["requests", "tqdm"])
+
+from tqdm import tqdm
+from sklearn.model_selection import train_test_split
+import os
+import pandas as pd
+import zipfile
+import boto3
+from pyarrow import fs, parquet
+
+@dsl.component(base_image="python:3.11", target_image="mlsysfromscratch/data_preprocessor:1.0.0", packages_to_install=["requests"])
 def download_ml25m_data(output_path_one: Output[Artifact]):
     import requests
-    from tqdm import tqdm
     url = 'https://files.grouplens.org/datasets/movielens/ml-25m.zip'
     response = requests.get(url, stream=True, verify=False)
     #file_size = int(response.headers.get("Content-Length", 0))
@@ -18,7 +26,7 @@ def download_ml25m_data(output_path_one: Output[Artifact]):
             if chunk:
                 file.write(chunk)
 
-@dsl.component()            
+@dsl.component(base_image="python:3.11", target_image="mlsysfromscratch/data_preprocessor:1.0.0")            
 def unzip_data(input_path: Input[Artifact], ratings_output_path: Output[Artifact], movies_output_path: Output[Artifact]):
     import zipfile
 
@@ -28,7 +36,7 @@ def unzip_data(input_path: Input[Artifact], ratings_output_path: Output[Artifact
         with open(movies_output_path.path, 'wb') as f:
             f.write(z.read('ml-25m/movies.csv'))
 
-@dsl.component(packages_to_install=["scikit-learn", "pandas", "fastparquet"])
+@dsl.component(base_image="python:3.11", target_image="mlsysfromscratch/data_preprocessor:1.0.0", packages_to_install=["scikit-learn", "pandas", "fastparquet"])
 def split_dataset(input_parquet: Input[Artifact], dataset_path: Output[Artifact], random_state: int = 42):
     from sklearn.model_selection import train_test_split
     import os
@@ -58,13 +66,13 @@ def split_dataset(input_parquet: Input[Artifact], dataset_path: Output[Artifact]
     test.to_parquet(os.path.join(dataset_path.path, 'test.parquet.gzip'), compression='gzip')
     val.to_parquet(os.path.join(dataset_path.path, 'val.parquet.gzip'), compression='gzip')
 
-@dsl.component(packages_to_install=["pandas", "fastparquet"])
+@dsl.component(base_image="python:3.11", target_image="mlsysfromscratch/data_preprocessor:1.0.0", packages_to_install=["scikit-learn", "pandas", "fastparquet"])
 def csv_to_parquet(inputFile: Input[Artifact], output_path: Output[Artifact]):
     import pandas as pd
     df = pd.read_csv(inputFile.path, index_col=False)
     df.to_parquet(output_path.path, compression='gzip') 
 
-@dsl.component(packages_to_install=["boto3"])
+@dsl.component(base_image="python:3.11", target_image="mlsysfromscratch/data_preprocessor:1.0.0", packages_to_install=["boto3"])
 def put_to_minio(inputFile: Input[Artifact], upload_file_name:str='', bucket: str='datasets'):
     import boto3
     import os
@@ -90,7 +98,7 @@ def put_to_minio(inputFile: Input[Artifact], upload_file_name:str='', bucket: st
         s3_path = os.path.join('ml-25m', file)
         minio_client.upload_file(inputFile.path, bucket, s3_path)
 
-@dsl.component(packages_to_install=["pyarrow", "pandas"]) 
+@dsl.component(base_image="python:3.11", target_image="mlsysfromscratch/data_preprocessor:1.0.0", packages_to_install=["pyarrow"]) 
 def qa_data(bucket:str = 'datasets', dataset:str = 'ml-25m'):
     from pyarrow import fs, parquet
     print("Running QA")
