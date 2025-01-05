@@ -2,7 +2,6 @@ import kfp.components as comp
 from kfp import dsl
 from kfp.dsl import Input, Output, Model, Dataset, OutputPath, Artifact
 
-
 from tqdm import tqdm
 from sklearn.model_selection import train_test_split
 import os
@@ -98,7 +97,7 @@ def put_to_minio(inputFile: Input[Artifact], upload_file_name:str='', bucket: st
         s3_path = os.path.join('ml-25m', file)
         minio_client.upload_file(inputFile.path, bucket, s3_path)
 
-@dsl.component(base_image="python:3.11", target_image="mlsysfromscratch/data_preprocessor:1.0.0", packages_to_install=["pyarrow"]) 
+@dsl.component(base_image="python:3.11", target_image="mlsysfromscratch/data_preprocessor:1.0.0", packages_to_install=["pyarrow", "pandas"]) 
 def qa_data(bucket:str = 'datasets', dataset:str = 'ml-25m'):
     from pyarrow import fs, parquet
     print("Running QA")
