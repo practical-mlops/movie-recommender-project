@@ -33,3 +33,19 @@ Edit the following links to point to your new MFlow instance
 
 Build the pipelines by running 01_data_preparation_pipeline.py and 02_training_and_validation.py files. This should compile two yaml files in the compiled pipelines folder.
 
+## Running the pipelines
+
+Upload the pipeline yaml in compiled_pipelines to kubeflow using the UI.
+
+Run the data preparation pipeline first to download and save the dataset to the local minio instance. 
+After that, run the training and validation pipeline to train a model and save it to MLFlow. 
+> Remember to tweak the number of epochs and keep it low when doing initial tests so that you can iterate quickly. 
+
+There should be metrics logged while training is ongoing in MLFlow. At the end of training, the model will also be registered in MFLow.
+
+## Testing the model
+
+Configure the tracking_uri in the notebook in notebooks/model_inference_bentoml.ipynb to point to the MLFLow instance with the registered model. 
+In the current configuration, the model will be registered with the name `recommender_production` and a version alias `prod`
+
+Run the notebook to retrieve the prod model and run an inference locally. 
