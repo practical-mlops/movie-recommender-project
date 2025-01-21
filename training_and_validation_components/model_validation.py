@@ -1,14 +1,15 @@
 from kfp.dsl import component, Input, Dataset
 
+
 @component(packages_to_install=["scikit-metrics", "torch", "torchvision", "torchaudio", "mlflow", "pandas"],
            pip_index_urls=["https://download.pytorch.org/whl/cpu", "https://pypi.org/simple", "https://pypi.python.org/simple"])
 def validate_model(
-    model_run_id: str, 
-    top_k: int,
-    threshold: int,
-    val_batch_size: int,
-    mlflow_uri: str, 
-    validation_dataset: Input[Dataset]):
+        model_run_id: str,
+        top_k: int,
+        threshold: int,
+        val_batch_size: int,
+        mlflow_uri: str,
+        validation_dataset: Input[Dataset]):
 
     # https://pureai.substack.com/p/recommender-systems-with-pytorch
     from collections import defaultdict
@@ -25,6 +26,7 @@ def validate_model(
     recommendation_model = mlflow.pytorch.load_model(model_uri)
     class datasetReader(Dataset):
         def __init__(self, df, dataset_name):
+            super().__init__()
             self.df = df
             self.name = dataset_name
             print(f"{self.name} : {self.df.shape[0]}")
@@ -78,7 +80,6 @@ def validate_model(
         precision, recall = calculate_precision_recall(user_ratings, k, threshold)
         user_precisions[user_id] = precision
         user_based_recalls[user_id] = recall
-
 
     average_precision = sum(prec for prec in user_precisions.values()) / len(user_precisions)
     average_recall = sum(rec for rec in user_based_recalls.values()) / len(user_based_recalls)

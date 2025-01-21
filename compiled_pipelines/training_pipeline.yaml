@@ -1,6 +1,6 @@
 # PIPELINE DEFINITION
 # Name: model-training-pipeline
-# Description: A pipeline to train models on the movielens dataset for recommenders
+# Description: A pipeline to train recommenders on the movielens dataset
 # Inputs:
 #    hot_reload_model_id: str [Default: 'none']
 #    minio_bucket: str [Default: 'datasets']
@@ -189,7 +189,7 @@ deploymentSpec:
         - -c
         - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
           \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
-          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.10.1'\
+          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.11.0'\
           \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"'  &&\
           \  python3 -m pip install --quiet --no-warn-script-location 'scikit-learn'\
           \ 'pandas' 'fastparquet' 'pyarrow' && \"$0\" \"$@\"\n"
@@ -204,7 +204,7 @@ deploymentSpec:
 
           '
         - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
-          \ *\n\ndef get_dataset_metadata(bucket:str , dataset_name:str) -> Dict[str,\
+          \ *\n\ndef get_dataset_metadata(bucket: str, dataset_name: str) -> Dict[str,\
           \ int]:\n    from pyarrow import fs, parquet\n    valid_splits = ['test',\
           \ 'train', 'val']\n    data_map = {'n_users': 0, 'n_items': 0}\n    minio\
           \ = fs.S3FileSystem(\n        endpoint_override='http://minio-service.kubeflow:9000',\n\
@@ -214,9 +214,7 @@ deploymentSpec:
           \        df = parquet.read_table(paraquet_data).to_pandas()\n        print(df.head())\n\
           \        data_map['n_users'] = max(data_map['n_users'], int(df.userId.max()))\n\
           \        data_map['n_items'] = max(data_map['n_items'], int(df.movieId.max()))\n\
-          \n    #assert list(data_map.keys()) == split, f\"Mismatched or invalid splits.\
-          \ Received {split} but can only process {valid_splits}\"\n    return data_map\n\
-          \n"
+          \n    return data_map\n\n"
         image: python:3.9
     exec-get-test-valid-dataset:
       container:
@@ -230,7 +228,7 @@ deploymentSpec:
         - -c
         - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
           \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
-          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.10.1'\
+          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.11.0'\
           \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"'  &&\
           \  python3 -m pip install --quiet --no-warn-script-location 'pandas' 'fastparquet'\
           \ 'numpy' 'pyarrow' && \"$0\" \"$@\"\n"
@@ -247,10 +245,10 @@ deploymentSpec:
         - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
           \ *\n\ndef get_test_valid_dataset(bucket: str, dataset_name: str, testing_dataset:\
           \ Output[Dataset], validation_dataset: Output[Dataset]):\n    from pyarrow\
-          \ import fs, parquet\n    import pandas as pd\n\n    #assert split in ['test',\
-          \ 'train', 'val']\n    minio = fs.S3FileSystem(\n        endpoint_override='http://minio-service.kubeflow:9000',\n\
-          \         access_key='minio',\n         secret_key='minio123',\n       \
-          \  scheme='http')\n    paraquet_data = minio.open_input_file(f'{bucket}/{dataset_name}/test.parquet.gzip')\n\
+          \ import fs, parquet\n    import pandas as pd\n\n    minio = fs.S3FileSystem(\n\
+          \        endpoint_override='http://minio-service.kubeflow:9000',\n     \
+          \   access_key='minio',\n        secret_key='minio123',\n        scheme='http')\n\
+          \    paraquet_data = minio.open_input_file(f'{bucket}/{dataset_name}/test.parquet.gzip')\n\
           \    df = parquet.read_table(paraquet_data).to_pandas()\n    pd.to_pickle(df,\
           \ testing_dataset.path)\n\n    print(df.head())\n\n    paraquet_data2 =\
           \ minio.open_input_file(f'{bucket}/{dataset_name}/val.parquet.gzip')\n \
@@ -269,7 +267,7 @@ deploymentSpec:
         - -c
         - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
           \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
-          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.10.1'\
+          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.11.0'\
           \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"'  &&\
           \  python3 -m pip install --quiet --no-warn-script-location 'pandas' 'fastparquet'\
           \ 'numpy' 'pyarrow' && \"$0\" \"$@\"\n"
@@ -284,24 +282,22 @@ deploymentSpec:
 
           '
         - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
-          \ *\n\ndef negative_sampling(num_ng_test:int, bucket:str , dataset_name:str,\
-          \ split: str, negative_sampled_dataset: Output[Dataset]):\n    import pandas\
-          \ as pd\n    from pyarrow import fs, parquet\n    import numpy as np\n\n\
-          \    minio = fs.S3FileSystem(\n        endpoint_override='http://minio-service.kubeflow:9000',\n\
-          \         access_key='minio',\n         secret_key='minio123',\n       \
-          \  scheme='http')\n    paraquet_data = minio.open_input_file(f'{bucket}/{dataset_name}/{split}.parquet.gzip')\n\
-          \    ratings = parquet.read_table(paraquet_data).to_pandas()\n    #for testing\n\
-          \    pd.to_pickle(ratings, negative_sampled_dataset.path)\n    return\n\
-          \    item_pool = set(ratings['movieId'].unique())\n    interact_status =\
-          \ (\n\t\t\tratings.groupby('userId')['movieId']\n\t\t\t.apply(set)\n\t\t\
-          \t.reset_index()\n\t\t\t.rename(columns={'movieId': 'interacted_items'}))\n\
+          \ *\n\ndef negative_sampling(num_ng_test: int, bucket: str , dataset_name:\
+          \ str, split: str, negative_sampled_dataset: Output[Dataset]):\n    import\
+          \ pandas as pd\n    from pyarrow import fs, parquet\n    import numpy as\
+          \ np\n\n    minio = fs.S3FileSystem(\n        endpoint_override='http://minio-service.kubeflow:9000',\n\
+          \        access_key='minio',\n        secret_key='minio123',\n        scheme='http')\n\
+          \    paraquet_data = minio.open_input_file(f'{bucket}/{dataset_name}/{split}.parquet.gzip')\n\
+          \    ratings = parquet.read_table(paraquet_data).to_pandas()\n    item_pool\
+          \ = set(ratings['movieId'].unique())\n    interact_status = (\n        \
+          \    ratings.groupby('userId')['movieId']\n            .apply(set)\n   \
+          \         .reset_index()\n            .rename(columns={'movieId': 'interacted_items'}))\n\
           \    interact_status['negative_samples'] = interact_status['interacted_items'].apply(lambda\
           \ x: np.random.choice(list(item_pool - x), num_ng_test))\n    interact_status['rating']\
           \ = 0.0\n    interact_status['timestamp'] = 1051631039\n    interact_status\
           \ = interact_status.drop(columns=['interacted_items']).explode('negative_samples').rename(columns={'negative_samples':'movieId'})\n\
-          \    #ret = ratings.append(interact_status, ignore_index=True)\n    ret\
-          \ = pd.concat([ratings, interact_status], ignore_index=True)\n    pd.to_pickle(ret,\
-          \ negative_sampled_dataset.path)\n\n"
+          \    ret = pd.concat([ratings, interact_status], ignore_index=True)\n  \
+          \  pd.to_pickle(ret, negative_sampled_dataset.path)\n\n"
         image: python:3.9
     exec-promote-model-to-staging:
       container:
@@ -315,7 +311,7 @@ deploymentSpec:
         - -c
         - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
           \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
-          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.10.1'\
+          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.11.0'\
           \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"'  &&\
           \  python3 -m pip install --quiet --no-warn-script-location 'mlflow' &&\
           \ \"$0\" \"$@\"\n"
@@ -330,11 +326,12 @@ deploymentSpec:
 
           '
         - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
-          \ *\n\ndef promote_model_to_staging(\n    model_run_id: str, \n    registered_model_name:\
-          \ str,\n    rms_threshold: float, \n    precision_threshold: float,\n  \
-          \  top_k: int,\n    recall_threshold: float,\n    mlflow_uri: str):\n\n\
-          \    import mlflow.pytorch\n    import mlflow\n    from mlflow import MlflowClient\n\
-          \    from mlflow.exceptions import RestException\n\n    mlflow.set_tracking_uri(uri=mlflow_uri)\n\
+          \ *\n\ndef promote_model_to_staging(\n        model_run_id: str,\n     \
+          \   registered_model_name: str,\n        rms_threshold: float,\n       \
+          \ precision_threshold: float,\n        top_k: int,\n        recall_threshold:\
+          \ float,\n        mlflow_uri: str):\n\n    import mlflow.pytorch\n    import\
+          \ mlflow\n    from mlflow import MlflowClient\n    from mlflow.exceptions\
+          \ import RestException\n\n    mlflow.set_tracking_uri(uri=mlflow_uri)\n\
           \    client = MlflowClient()\n\n    current_staging = None\n    try:\n \
           \       current_staging = client.get_model_version_by_alias(registered_model_name,\
           \ \"staging\")\n    except RestException:\n        print(\"No staging model\
@@ -365,7 +362,7 @@ deploymentSpec:
         - -c
         - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
           \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
-          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.10.1'\
+          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.11.0'\
           \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"'  &&\
           \  python3 -m pip install --quiet --no-warn-script-location 'pyarrow' 'pandas'\
           \ && \"$0\" \"$@\"\n"
@@ -380,15 +377,15 @@ deploymentSpec:
 
           '
         - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
-          \ *\n\ndef qa_data(bucket:str = 'datasets', dataset:str = 'ml-25m'):\n \
-          \   from pyarrow import fs, parquet\n    print(\"Running QA\")\n    minio\
+          \ *\n\ndef qa_data(bucket: str = 'datasets', dataset: str = 'ml-25m'):\n\
+          \    from pyarrow import fs, parquet\n    print(\"Running QA\")\n    minio\
           \ = fs.S3FileSystem(\n        endpoint_override='http://minio-service.kubeflow:9000',\n\
-          \         access_key='minio',\n         secret_key='minio123',\n       \
-          \  scheme='http')\n    train_parquet = minio.open_input_file(f'{bucket}/{dataset}/train.parquet.gzip')\n\
+          \        access_key='minio',\n        secret_key='minio123',\n        scheme='http')\n\
+          \    train_parquet = minio.open_input_file(f'{bucket}/{dataset}/train.parquet.gzip')\n\
           \    df = parquet.read_table(train_parquet).to_pandas()\n    assert df.shape[1]\
           \ == 4\n    assert df.shape[0] >= 0.75 * 25 * 1e6\n    print('QA passed!')\n\
           \n"
-        image: python:3.9
+        image: python:3.11
     exec-train-model:
       container:
         args:
@@ -404,7 +401,7 @@ deploymentSpec:
           \ python3 -m pip install --quiet --no-warn-script-location --index-url https://download.pytorch.org/whl/cpu\
           \ --extra-index-url https://pypi.org/simple --extra-index-url https://pypi.python.org/simple\
           \ --trusted-host https://download.pytorch.org/whl/cpu --trusted-host https://pypi.org/simple\
-          \ --trusted-host https://pypi.python.org/simple 'kfp==2.10.1' '--no-deps'\
+          \ --trusted-host https://pypi.python.org/simple 'kfp==2.11.0' '--no-deps'\
           \ 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"'  &&  python3 -m\
           \ pip install --quiet --no-warn-script-location --index-url https://download.pytorch.org/whl/cpu\
           \ --extra-index-url https://pypi.org/simple --extra-index-url https://pypi.python.org/simple\
@@ -433,22 +430,22 @@ deploymentSpec:
           \ bool, shuffle_testing_data: bool) -> str:\n    input_params = {}\n   \
           \ for k, v in locals().items():\n        if k == 'input_params':\n     \
           \       continue\n        input_params[k] = v\n    import torch\n    from\
-          \ torch.autograd import Variable\n    from torch.utils.data import DataLoader\n\
-          \    import mlflow\n    from torchinfo import summary\n    from mlflow.models\
-          \ import infer_signature\n    from torch.utils.data import Dataset\n   \
-          \ import pandas as pd\n\n    class datasetReader(Dataset):\n        def\
-          \ __init__(self, df, dataset_name):\n            self.df = df\n        \
-          \    self.name = dataset_name\n            print(f\"{self.name} : {self.df.shape[0]}\"\
-          )\n\n        def __len__(self):\n            return self.df.shape[0]\n\n\
-          \        def __getitem__(self, idx):\n            sd = self.df.iloc[idx]\n\
-          \            user = sd['userId']\n            item = sd['movieId']\n   \
-          \         rating = sd['rating']\n            return torch.tensor(user-1).long(),\
-          \ torch.tensor(item-1).long(), torch.tensor(rating).float()\n\n    class\
-          \ MatrixFactorization(torch.nn.Module):\n        def __init__(self, n_users,\
-          \ n_items, n_factors, hidden_dim, dropout_rate):\n            super().__init__()\n\
-          \            self.n_items = n_items\n            self.user_factors = torch.nn.Embedding(n_users+1,\
-          \ \n                                               n_factors,\n        \
-          \                                       sparse=False)\n            self.item_factors\
+          \ torch.utils.data import DataLoader\n    import mlflow\n    from torchinfo\
+          \ import summary\n    from mlflow.models import infer_signature\n    from\
+          \ torch.utils.data import Dataset\n    import pandas as pd\n\n    class\
+          \ datasetReader(Dataset):\n        def __init__(self, df, dataset_name):\n\
+          \            self.df = df\n            self.name = dataset_name\n      \
+          \      print(f\"{self.name} : {self.df.shape[0]}\")\n\n        def __len__(self):\n\
+          \            return self.df.shape[0]\n\n        def __getitem__(self, idx):\n\
+          \            sd = self.df.iloc[idx]\n            user = sd['userId']\n \
+          \           item = sd['movieId']\n            rating = sd['rating']\n  \
+          \          return torch.tensor(user-1).long(), torch.tensor(item-1).long(),\
+          \ torch.tensor(rating).float()\n\n    class MatrixFactorization(torch.nn.Module):\n\
+          \        def __init__(self, n_users, n_items, n_factors, hidden_dim, dropout_rate):\n\
+          \            super().__init__()\n            self.n_items = n_items\n  \
+          \          self.user_factors = torch.nn.Embedding(n_users+1, \n        \
+          \                                       n_factors,\n                   \
+          \                            sparse=False)\n            self.item_factors\
           \ = torch.nn.Embedding(n_items+1, \n                                   \
           \            n_factors,\n                                              \
           \ sparse=False)\n\n            self.linear = torch.nn.Linear(in_features=n_factors,\
@@ -478,24 +475,24 @@ deploymentSpec:
           \ new MLflow Experiment\n    mlflow.set_experiment(mlflow_experiment_name)\n\
           \n    if mlflow_run_id == \"\":\n        mlflow_run_id = None\n\n    with\
           \ mlflow.start_run(run_id=mlflow_run_id) as run:\n        current_run_id\
-          \ = run.info.run_id\n        for k,v in input_params.items():\n        \
-          \    if 'mlflow_' not in k:\n                mlflow.log_param(k, v)\n  \
-          \      mlflow.log_param(\"loss_function\", loss_func.__class__.__name__)\n\
-          \        #mlflow.log_param(\"metric_function\", metric_fn.__class__.__name__,\n\
+          \ = run.info.run_id\n        for k, v in input_params.items():\n       \
+          \     if 'mlflow_' not in k:\n                mlflow.log_param(k, v)\n \
+          \       mlflow.log_param(\"loss_function\", loss_func.__class__.__name__)\n\
           \        mlflow.log_param(\"optimizer\", \"SGD\")\n        mlflow.log_params({'n_user':\
-          \ n_users, 'n_items': n_items})\n\n        for k,v in mlflow_tags.items():\n\
+          \ n_users, 'n_items': n_items})\n\n        for k, v in mlflow_tags.items():\n\
           \            mlflow.set_tag(k, v)\n\n        with open(\"model_summary.txt\"\
-          , \"w\") as f:\n            f.write(str(summary(model)))\n        mlflow.log_artifact(\"\
-          model_summary.txt\")\n\n        model_signature = None\n\n        for train_iter\
-          \ in range(training_epochs):\n            print(train_iter)\n          \
-          \  model.train()\n            t_loss = 0\n            t_count = 0\n    \
-          \        for row, col, rating in train_dataloader:\n                # Predict\
-          \ and calculate loss\n                #try:\n                prediction\
+          , \"w\", encoding=\"utf-8\") as f:\n            f.write(str(summary(model)))\n\
+          \        mlflow.log_artifact(\"model_summary.txt\")\n\n        model_signature\
+          \ = None\n\n        for train_iter in range(training_epochs):\n        \
+          \    print(train_iter)\n            model.train()\n            t_loss =\
+          \ 0\n            t_count = 0\n            for row, col, rating in train_dataloader:\n\
+          \                # Predict and calculate loss\n                prediction\
           \ = model(row, col)\n                if model_signature is None:\n     \
-          \               model_signature = infer_signature({'user': row.cpu().detach().numpy(),\
-          \ 'movie': col.cpu().detach().numpy()}, prediction.cpu().detach().numpy())\n\
-          \n                #except Exception as e:\n                #print(f\"R:{row},\
-          \ C:{col}\")\n                loss = loss_func(prediction, rating.unsqueeze(1))\n\
+          \               model_signature = infer_signature(\n                   \
+          \     {\n                            'user': row.cpu().detach().numpy(),\n\
+          \                            'movie': col.cpu().detach().numpy()\n     \
+          \                   },\n                        prediction.cpu().detach().numpy()\n\
+          \                    )\n\n                loss = loss_func(prediction, rating.unsqueeze(1))\n\
           \                t_loss += loss\n                t_count += 1\n\n      \
           \          # Backpropagate\n                loss.backward()\n\n        \
           \        # Update the parameters\n                optimizer.step()\n   \
@@ -503,15 +500,14 @@ deploymentSpec:
           , f\"{(t_loss/t_count):3f}\", step=train_iter)\n            scheduler.step()\n\
           \            model.eval()\n            te_loss = 0\n            te_count\
           \ = 0\n            print('Evaluating')\n            with torch.no_grad():\n\
-          \                #HR, NDCG = metrics(model, test_dataloader, 5)\n      \
-          \          for row, col,rating in test_dataloader:\n                   \
-          \ prediction = model(row, col)\n                    loss = loss_func(prediction,\
+          \                for row, col, rating in test_dataloader:\n            \
+          \        prediction = model(row, col)\n                    loss = loss_func(prediction,\
           \ rating.unsqueeze(1))\n                    te_loss += loss\n          \
           \          te_count += 1\n            mlflow.log_metric(\"avg_testing_loss\"\
-          , f\"{(te_loss/te_count):3f}\", step=train_iter)\n            #print(f\"\
-          HR: {HR} NDCG:{NDCG}\")\n            print(f\"Test loss: {te_loss/te_count}\"\
-          )\n            print(f\"Train loss: {t_loss/t_count}\")\n\n        mlflow.pytorch.log_model(model,\
-          \ \"model\", signature=model_signature)\n    return current_run_id\n\n"
+          , f\"{(te_loss/te_count):3f}\", step=train_iter)\n            print(f\"\
+          Test loss: {te_loss/te_count}\")\n            print(f\"Train loss: {t_loss/t_count}\"\
+          )\n\n        mlflow.pytorch.log_model(model, \"model\", signature=model_signature)\n\
+          \    return current_run_id\n\n"
         image: python:3.9
     exec-validate-model:
       container:
@@ -528,7 +524,7 @@ deploymentSpec:
           \ python3 -m pip install --quiet --no-warn-script-location --index-url https://download.pytorch.org/whl/cpu\
           \ --extra-index-url https://pypi.org/simple --extra-index-url https://pypi.python.org/simple\
           \ --trusted-host https://download.pytorch.org/whl/cpu --trusted-host https://pypi.org/simple\
-          \ --trusted-host https://pypi.python.org/simple 'kfp==2.10.1' '--no-deps'\
+          \ --trusted-host https://pypi.python.org/simple 'kfp==2.11.0' '--no-deps'\
           \ 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"'  &&  python3 -m\
           \ pip install --quiet --no-warn-script-location --index-url https://download.pytorch.org/whl/cpu\
           \ --extra-index-url https://pypi.org/simple --extra-index-url https://pypi.python.org/simple\
@@ -546,22 +542,22 @@ deploymentSpec:
 
           '
         - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
-          \ *\n\ndef validate_model(\n    model_run_id: str, \n    top_k: int,\n \
-          \   threshold: int,\n    val_batch_size: int,\n    mlflow_uri: str, \n \
-          \   validation_dataset: Input[Dataset]):\n\n    # https://pureai.substack.com/p/recommender-systems-with-pytorch\n\
+          \ *\n\ndef validate_model(\n        model_run_id: str,\n        top_k: int,\n\
+          \        threshold: int,\n        val_batch_size: int,\n        mlflow_uri:\
+          \ str,\n        validation_dataset: Input[Dataset]):\n\n    # https://pureai.substack.com/p/recommender-systems-with-pytorch\n\
           \    from collections import defaultdict\n    import torch\n    import mlflow.pytorch\n\
           \    import mlflow\n    from sklearn.metrics import root_mean_squared_error\n\
           \    from torch.utils.data import DataLoader\n    import pandas as pd\n\n\
           \    mlflow.set_tracking_uri(uri=mlflow_uri)\n\n    model_uri = f\"runs:/{model_run_id}/model\"\
           \n    recommendation_model = mlflow.pytorch.load_model(model_uri)\n    class\
           \ datasetReader(Dataset):\n        def __init__(self, df, dataset_name):\n\
-          \            self.df = df\n            self.name = dataset_name\n      \
-          \      print(f\"{self.name} : {self.df.shape[0]}\")\n\n        def __len__(self):\n\
-          \            return self.df.shape[0]\n\n        def __getitem__(self, idx):\n\
-          \            sd = self.df.iloc[idx]\n            user = sd['user_id']\n\
-          \            item = sd['item_id']\n            rating = sd['rating']\n \
-          \           return torch.tensor(user-1).long(), torch.tensor(item-1).long(),\
-          \ torch.tensor(rating).float()\n\n    def calculate_precision_recall(user_ratings,\
+          \            super().__init__()\n            self.df = df\n            self.name\
+          \ = dataset_name\n            print(f\"{self.name} : {self.df.shape[0]}\"\
+          )\n\n        def __len__(self):\n            return self.df.shape[0]\n\n\
+          \        def __getitem__(self, idx):\n            sd = self.df.iloc[idx]\n\
+          \            user = sd['userId']\n            item = sd['movieId']\n   \
+          \         rating = sd['rating']\n            return torch.tensor(user-1).long(),\
+          \ torch.tensor(item-1).long(), torch.tensor(rating).float()\n\n    def calculate_precision_recall(user_ratings,\
           \ k, threshold):\n        user_ratings.sort(key=lambda x: x[0], reverse=True)\n\
           \        n_rel = sum(true_r >= threshold for _, true_r in user_ratings)\n\
           \        n_rec_k = sum(est >= threshold for est, _ in user_ratings[:k])\n\
@@ -581,17 +577,17 @@ deploymentSpec:
           \ = dict()\n\n    k = top_k\n\n    for user_id, user_ratings in user_ratings_comparison.items():\n\
           \        precision, recall = calculate_precision_recall(user_ratings, k,\
           \ threshold)\n        user_precisions[user_id] = precision\n        user_based_recalls[user_id]\
-          \ = recall\n\n\n    average_precision = sum(prec for prec in user_precisions.values())\
+          \ = recall\n\n    average_precision = sum(prec for prec in user_precisions.values())\
           \ / len(user_precisions)\n    average_recall = sum(rec for rec in user_based_recalls.values())\
-          \ / len(user_based_recalls)\n    rms = root_mean_squared_error(y_true, y_pred,\
-          \ squared=False)\n\n    print(f\"precision_{k}: {average_precision:.4f}\"\
-          )\n    print(f\"recall_{k}: {average_recall:.4f}\")\n    print(f\"rms: {rms:.4f}\"\
-          )\n    mlflow.log_metric(f\"precision_{k}\", average_precision, run_id=model_run_id)\n\
+          \ / len(user_based_recalls)\n    rms = root_mean_squared_error(y_true, y_pred)\n\
+          \n    print(f\"precision_{k}: {average_precision:.4f}\")\n    print(f\"\
+          recall_{k}: {average_recall:.4f}\")\n    print(f\"rms: {rms:.4f}\")\n  \
+          \  mlflow.log_metric(f\"precision_{k}\", average_precision, run_id=model_run_id)\n\
           \    mlflow.log_metric(f\"recall_{k}\", average_recall, run_id=model_run_id)\n\
           \    mlflow.log_metric(\"rms\", rms, run_id=model_run_id)\n\n"
         image: python:3.9
 pipelineInfo:
-  description: A pipeline to train models on the movielens dataset for recommenders
+  description: A pipeline to train recommenders on the movielens dataset
   name: model-training-pipeline
 root:
   dag:
@@ -612,8 +608,7 @@ root:
         taskInfo:
           name: get-dataset-metadata
       get-test-valid-dataset:
-        cachingOptions:
-          enableCache: true
+        cachingOptions: {}
         componentRef:
           name: comp-get-test-valid-dataset
         dependentTasks:
@@ -627,8 +622,7 @@ root:
         taskInfo:
           name: get-test-valid-dataset
       negative-sampling:
-        cachingOptions:
-          enableCache: true
+        cachingOptions: {}
         componentRef:
           name: comp-negative-sampling
         dependentTasks:
@@ -870,4 +864,4 @@ root:
         isOptional: true
         parameterType: NUMBER_INTEGER
 schemaVersion: 2.1.0
-sdkVersion: kfp-2.10.1
+sdkVersion: kfp-2.11.0

@@ -31,9 +31,7 @@ class RecommenderRunable:
         self, user_id: int, top_k: int = 10, ranked_movies: np.ndarray = None
     ) -> np.ndarray:
         user_id = torch.tensor([user_id], dtype=torch.long).to(self.device)
-        all_items = torch.arange(1, self.model.n_items + 1, dtype=torch.long).to(
-            self.device
-        )
+        all_items = torch.arange(1, self.model.n_items + 1, dtype=torch.long).to(self.device)
 
         # Remove already ranked movies from the list of all items
         if ranked_movies is not None:
@@ -43,7 +41,7 @@ class RecommenderRunable:
             )
             unrated_items = all_items[~torch.isin(all_items, ranked_movies)]
         else:
-            ranked_movies_absent_counter.inc()
+            ranked_movie_absent_counter.inc()
             unrated_items = all_items
 
         user_ids = user_id.repeat(len(unrated_items))

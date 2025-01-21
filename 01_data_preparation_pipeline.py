@@ -1,5 +1,5 @@
 import kfp
-import kfp.dsl as dsl
+from kfp import dsl
 
 from data_components import (
     download_ml25m_data,
@@ -10,11 +10,12 @@ from data_components import (
     qa_data
 )
 
+
 @dsl.pipeline(
   name='Data prep pipeline',
   description='A pipeline that retrieves data from movielens and ingests it into paraquet files on minio'
 )
-def dataprep_pipeline(minio_bucket:str='datasets', random_init:int=42):
+def dataprep_pipeline(minio_bucket: str = 'datasets', random_init: int = 42):
     download_dataset = download_ml25m_data()
     unzip_folder = unzip_data(input_path=download_dataset.outputs['output_path_one'])
     ratings_parquet_op = csv_to_parquet(inputFile=unzip_folder.outputs['ratings_output_path'])
@@ -32,7 +33,7 @@ def dataprep_pipeline(minio_bucket:str='datasets', random_init:int=42):
     u1.set_caching_options(False)
     u2.set_caching_options(False)
     qa_op.set_caching_options(False)
-    
+
 
 if __name__ == "__main__":
     kfp.compiler.Compiler().compile(
