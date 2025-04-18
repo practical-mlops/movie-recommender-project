@@ -1,5 +1,6 @@
+from typing import Dict
 from kfp.dsl import component, Input, Dataset
-from typing import Dict, Optional
+
 
 @component(packages_to_install=["torch", "torchvision", "torchaudio", "mlflow", "torchinfo" ,"pandas"],
            pip_index_urls=["https://download.pytorch.org/whl/cpu", "https://pypi.org/simple", "https://pypi.python.org/simple"])
@@ -16,7 +17,6 @@ def train_model(mlflow_experiment_name: str, mlflow_run_id: str, mlflow_tags: di
             continue
         input_params[k] = v
     import torch
-    from torch.autograd import Variable
     from torch.utils.data import DataLoader
     import mlflow
     from torchinfo import summary
@@ -39,7 +39,7 @@ def train_model(mlflow_experiment_name: str, mlflow_run_id: str, mlflow_tags: di
             item = sd['movieId']
             rating = sd['rating']
             return torch.tensor(user-1).long(), torch.tensor(item-1).long(), torch.tensor(rating).float()
-    
+
     class MatrixFactorization(torch.nn.Module):
         def __init__(self, n_users, n_items, n_factors, hidden_dim, dropout_rate):
             super().__init__()
@@ -50,12 +50,12 @@ def train_model(mlflow_experiment_name: str, mlflow_run_id: str, mlflow_tags: di
             self.item_factors = torch.nn.Embedding(n_items+1, 
                                                n_factors,
                                                sparse=False)
-        
+
             self.linear = torch.nn.Linear(in_features=n_factors, out_features=hidden_dim)
             self.linear2 = torch.nn.Linear(in_features=hidden_dim, out_features=1)
             self.dropout = torch.nn.Dropout(p=dropout_rate)
             self.relu = torch.nn.ReLU()
-        
+
         def forward(self, user, item):
             user_embedding = self.user_factors(user)
             item_embedding = self.item_factors(item)
@@ -97,18 +97,17 @@ def train_model(mlflow_experiment_name: str, mlflow_run_id: str, mlflow_tags: di
 
     with mlflow.start_run(run_id=mlflow_run_id) as run:
         current_run_id = run.info.run_id
-        for k,v in input_params.items():
+        for k, v in input_params.items():
             if 'mlflow_' not in k:
                 mlflow.log_param(k, v)
         mlflow.log_param("loss_function", loss_func.__class__.__name__)
-        #mlflow.log_param("metric_function", metric_fn.__class__.__name__,
         mlflow.log_param("optimizer", "SGD")
         mlflow.log_params({'n_user': n_users, 'n_items': n_items})
-    
-        for k,v in mlflow_tags.items():
+
+        for k, v in mlflow_tags.items():
             mlflow.set_tag(k, v)
 
-        with open("model_summary.txt", "w") as f:
+        with open("model_summary.txt", "w", encoding="utf-8") as f:
             f.write(str(summary(model)))
         mlflow.log_artifact("model_summary.txt")
 
@@ -121,13 +120,16 @@ def train_model(mlflow_experiment_name: str, mlflow_run_id: str, mlflow_tags: di
             t_count = 0
             for row, col, rating in train_dataloader:
                 # Predict and calculate loss
-                #try:
                 prediction = model(row, col)
                 if model_signature is None:
-                    model_signature = infer_signature({'user': row.cpu().detach().numpy(), 'movie': col.cpu().detach().numpy()}, prediction.cpu().detach().numpy())
+                    model_signature = infer_signature(
+                        {
+                            'user': row.cpu().detach().numpy(),
+                            'movie': col.cpu().detach().numpy()
+                        },
+                        prediction.cpu().detach().numpy()
+                    )
 
-                #except Exception as e:
-                #print(f"R:{row}, C:{col}")
                 loss = loss_func(prediction, rating.unsqueeze(1))
                 t_loss += loss
                 t_count += 1
@@ -145,14 +147,12 @@ def train_model(mlflow_experiment_name: str, mlflow_run_id: str, mlflow_tags: di
             te_count = 0
             print('Evaluating')
             with torch.no_grad():
-                #HR, NDCG = metrics(model, test_dataloader, 5)
-                for row, col,rating in test_dataloader:
+                for row, col, rating in test_dataloader:
                     prediction = model(row, col)
                     loss = loss_func(prediction, rating.unsqueeze(1))
                     te_loss += loss
                     te_count += 1
             mlflow.log_metric("avg_testing_loss", f"{(te_loss/te_count):3f}", step=train_iter)
-            #print(f"HR: {HR} NDCG:{NDCG}")
             print(f"Test loss: {te_loss/te_count}")
             print(f"Train loss: {t_loss/t_count}")
 

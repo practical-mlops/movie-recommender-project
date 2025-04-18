@@ -138,10 +138,10 @@ deploymentSpec:
         - -c
         - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
           \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
-          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.10.1'\
+          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.11.0'\
           \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"'  &&\
-          \  python3 -m pip install --quiet --no-warn-script-location 'pandas' 'fastparquet'\
-          \ && \"$0\" \"$@\"\n"
+          \  python3 -m pip install --quiet --no-warn-script-location 'scikit-learn'\
+          \ 'pandas' 'fastparquet' && \"$0\" \"$@\"\n"
         - sh
         - -ec
         - 'program_path=$(mktemp -d)
@@ -156,7 +156,7 @@ deploymentSpec:
           \ *\n\ndef csv_to_parquet(inputFile: Input[Artifact], output_path: Output[Artifact]):\n\
           \    import pandas as pd\n    df = pd.read_csv(inputFile.path, index_col=False)\n\
           \    df.to_parquet(output_path.path, compression='gzip') \n\n"
-        image: python:3.9
+        image: python:3.11
     exec-csv-to-parquet-2:
       container:
         args:
@@ -169,10 +169,10 @@ deploymentSpec:
         - -c
         - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
           \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
-          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.10.1'\
+          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.11.0'\
           \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"'  &&\
-          \  python3 -m pip install --quiet --no-warn-script-location 'pandas' 'fastparquet'\
-          \ && \"$0\" \"$@\"\n"
+          \  python3 -m pip install --quiet --no-warn-script-location 'scikit-learn'\
+          \ 'pandas' 'fastparquet' && \"$0\" \"$@\"\n"
         - sh
         - -ec
         - 'program_path=$(mktemp -d)
@@ -187,7 +187,7 @@ deploymentSpec:
           \ *\n\ndef csv_to_parquet(inputFile: Input[Artifact], output_path: Output[Artifact]):\n\
           \    import pandas as pd\n    df = pd.read_csv(inputFile.path, index_col=False)\n\
           \    df.to_parquet(output_path.path, compression='gzip') \n\n"
-        image: python:3.9
+        image: python:3.11
     exec-download-ml25m-data:
       container:
         args:
@@ -200,10 +200,10 @@ deploymentSpec:
         - -c
         - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
           \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
-          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.10.1'\
+          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.11.0'\
           \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"'  &&\
-          \  python3 -m pip install --quiet --no-warn-script-location 'requests' 'tqdm'\
-          \ && \"$0\" \"$@\"\n"
+          \  python3 -m pip install --quiet --no-warn-script-location 'requests' &&\
+          \ \"$0\" \"$@\"\n"
         - sh
         - -ec
         - 'program_path=$(mktemp -d)
@@ -216,16 +216,12 @@ deploymentSpec:
           '
         - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
           \ *\n\ndef download_ml25m_data(output_path_one: Output[Artifact]):\n   \
-          \ import requests\n    from tqdm import tqdm\n    url = 'https://files.grouplens.org/datasets/movielens/ml-25m.zip'\n\
-          \    response = requests.get(url, stream=True, verify=False)\n    #file_size\
-          \ = int(response.headers.get(\"Content-Length\", 0))\n    #progress_bar\
-          \ = tqdm(total=file_size, unit=\"B\", unit_scale=True)\n    print(output_path_one.path)\n\
-          \    with open(output_path_one.path, 'wb') as file: \n        for chunk\
-          \ in response.iter_content(chunk_size=1024*1024): #D\n            # Update\
-          \ the progress bar with the size of the downloaded chunk #D\n          \
-          \  #progress_bar.update(len(chunk)) #D\n            if chunk:\n        \
-          \        file.write(chunk)\n\n"
-        image: python:3.9
+          \ import requests\n    url = 'https://files.grouplens.org/datasets/movielens/ml-25m.zip'\n\
+          \    response = requests.get(url, stream=True, verify=False, timeout=60)\n\
+          \    print(output_path_one.path)\n    with open(output_path_one.path, 'wb')\
+          \ as file: \n        for chunk in response.iter_content(chunk_size=1024*1024):\
+          \  # D\n            if chunk:\n                file.write(chunk)\n\n"
+        image: python:3.11
     exec-put-to-minio:
       container:
         args:
@@ -238,7 +234,7 @@ deploymentSpec:
         - -c
         - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
           \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
-          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.10.1'\
+          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.11.0'\
           \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"'  &&\
           \  python3 -m pip install --quiet --no-warn-script-location 'boto3' && \"\
           $0\" \"$@\"\n"
@@ -257,17 +253,18 @@ deploymentSpec:
           \ bucket: str='datasets'):\n    import boto3\n    import os\n    minio_client\
           \ = boto3.client(                          \n        's3',             \
           \                                 \n        endpoint_url='http://minio-service.kubeflow:9000',\n\
-          \        aws_access_key_id='minio',\n        aws_secret_access_key='minio123')\
-          \ \n    try:\n        minio_client.create_bucket(Bucket=bucket)\n    except\
-          \ Exception as e:\n        # Bucket already created.\n        pass\n   \
-          \ if os.path.isdir(inputFile.path):\n        for file in os.listdir(inputFile.path):\n\
-          \            s3_path = os.path.join('ml-25m', file)\n            minio_client.upload_file(os.path.join(inputFile.path,\
+          \        aws_access_key_id='minio',\n        aws_secret_access_key='minio123')\n\
+          \    try:\n        minio_client.create_bucket(Bucket=bucket)\n    except\
+          \ minio_client.exceptions.BucketAlreadyExists:\n        # Bucket already\
+          \ created.\n        pass\n    if os.path.isdir(inputFile.path):\n      \
+          \  for file in os.listdir(inputFile.path):\n            s3_path = os.path.join('ml-25m',\
+          \ file)\n            minio_client.upload_file(os.path.join(inputFile.path,\
           \ file), bucket, s3_path)\n    else:\n        if upload_file_name == '':\n\
           \            _, file = os.path.split(inputFile.path)\n        else:\n  \
           \          file = upload_file_name\n        s3_path = os.path.join('ml-25m',\
           \ file)\n        minio_client.upload_file(inputFile.path, bucket, s3_path)\n\
           \n"
-        image: python:3.9
+        image: python:3.11
     exec-put-to-minio-2:
       container:
         args:
@@ -280,7 +277,7 @@ deploymentSpec:
         - -c
         - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
           \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
-          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.10.1'\
+          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.11.0'\
           \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"'  &&\
           \  python3 -m pip install --quiet --no-warn-script-location 'boto3' && \"\
           $0\" \"$@\"\n"
@@ -299,17 +296,18 @@ deploymentSpec:
           \ bucket: str='datasets'):\n    import boto3\n    import os\n    minio_client\
           \ = boto3.client(                          \n        's3',             \
           \                                 \n        endpoint_url='http://minio-service.kubeflow:9000',\n\
-          \        aws_access_key_id='minio',\n        aws_secret_access_key='minio123')\
-          \ \n    try:\n        minio_client.create_bucket(Bucket=bucket)\n    except\
-          \ Exception as e:\n        # Bucket already created.\n        pass\n   \
-          \ if os.path.isdir(inputFile.path):\n        for file in os.listdir(inputFile.path):\n\
-          \            s3_path = os.path.join('ml-25m', file)\n            minio_client.upload_file(os.path.join(inputFile.path,\
+          \        aws_access_key_id='minio',\n        aws_secret_access_key='minio123')\n\
+          \    try:\n        minio_client.create_bucket(Bucket=bucket)\n    except\
+          \ minio_client.exceptions.BucketAlreadyExists:\n        # Bucket already\
+          \ created.\n        pass\n    if os.path.isdir(inputFile.path):\n      \
+          \  for file in os.listdir(inputFile.path):\n            s3_path = os.path.join('ml-25m',\
+          \ file)\n            minio_client.upload_file(os.path.join(inputFile.path,\
           \ file), bucket, s3_path)\n    else:\n        if upload_file_name == '':\n\
           \            _, file = os.path.split(inputFile.path)\n        else:\n  \
           \          file = upload_file_name\n        s3_path = os.path.join('ml-25m',\
           \ file)\n        minio_client.upload_file(inputFile.path, bucket, s3_path)\n\
           \n"
-        image: python:3.9
+        image: python:3.11
     exec-qa-data:
       container:
         args:
@@ -322,7 +320,7 @@ deploymentSpec:
         - -c
         - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
           \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
-          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.10.1'\
+          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.11.0'\
           \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"'  &&\
           \  python3 -m pip install --quiet --no-warn-script-location 'pyarrow' 'pandas'\
           \ && \"$0\" \"$@\"\n"
@@ -337,15 +335,15 @@ deploymentSpec:
 
           '
         - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
-          \ *\n\ndef qa_data(bucket:str = 'datasets', dataset:str = 'ml-25m'):\n \
-          \   from pyarrow import fs, parquet\n    print(\"Running QA\")\n    minio\
+          \ *\n\ndef qa_data(bucket: str = 'datasets', dataset: str = 'ml-25m'):\n\
+          \    from pyarrow import fs, parquet\n    print(\"Running QA\")\n    minio\
           \ = fs.S3FileSystem(\n        endpoint_override='http://minio-service.kubeflow:9000',\n\
-          \         access_key='minio',\n         secret_key='minio123',\n       \
-          \  scheme='http')\n    train_parquet = minio.open_input_file(f'{bucket}/{dataset}/train.parquet.gzip')\n\
+          \        access_key='minio',\n        secret_key='minio123',\n        scheme='http')\n\
+          \    train_parquet = minio.open_input_file(f'{bucket}/{dataset}/train.parquet.gzip')\n\
           \    df = parquet.read_table(train_parquet).to_pandas()\n    assert df.shape[1]\
           \ == 4\n    assert df.shape[0] >= 0.75 * 25 * 1e6\n    print('QA passed!')\n\
           \n"
-        image: python:3.9
+        image: python:3.11
     exec-split-dataset:
       container:
         args:
@@ -358,7 +356,7 @@ deploymentSpec:
         - -c
         - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
           \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
-          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.10.1'\
+          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.11.0'\
           \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"'  &&\
           \  python3 -m pip install --quiet --no-warn-script-location 'scikit-learn'\
           \ 'pandas' 'fastparquet' && \"$0\" \"$@\"\n"
@@ -379,15 +377,16 @@ deploymentSpec:
           \ = 0.15\n    test_ratio = 0.10\n    ratings_df = pd.read_parquet(input_parquet.path)\n\
           \n    # train is now 75% of the entire data set\n    train, test = train_test_split(\n\
           \        ratings_df,                                    \n        test_size=1\
-          \ - train_ratio,\n        random_state=random_state)\n\n    # test is now\
-          \ 10% of the initial data set\n    # validation is now 15% of the initial\
-          \ data set\n    val, test = train_test_split(   \n        test,\n      \
-          \  test_size=test_ratio / (test_ratio + validation_ratio),\n        random_state=random_state)\n\
+          \ - train_ratio,\n        random_state=random_state)\n\n    n_users = ratings_df.user_id.max()\n\
+          \    n_items = ratings_df.item_id.max()\n\n    # test is now 10% of the\
+          \ initial data set\n    # validation is now 15% of the initial data set\n\
+          \    val, test = train_test_split(\n        test,\n        test_size=test_ratio\
+          \ / (test_ratio + validation_ratio),\n        random_state=random_state)\n\
           \    os.mkdir(dataset_path.path)\n    train.to_parquet(os.path.join(dataset_path.path,\
           \ 'train.parquet.gzip'), compression='gzip')\n    test.to_parquet(os.path.join(dataset_path.path,\
           \ 'test.parquet.gzip'), compression='gzip')\n    val.to_parquet(os.path.join(dataset_path.path,\
           \ 'val.parquet.gzip'), compression='gzip')\n\n"
-        image: python:3.9
+        image: python:3.11
     exec-unzip-data:
       container:
         args:
@@ -400,7 +399,7 @@ deploymentSpec:
         - -c
         - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
           \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
-          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.10.1'\
+          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.11.0'\
           \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"' && \"\
           $0\" \"$@\"\n"
         - sh
@@ -420,7 +419,7 @@ deploymentSpec:
           \ 'wb') as f:\n            f.write(z.read('ml-25m/ratings.csv'))\n     \
           \   with open(movies_output_path.path, 'wb') as f:\n            f.write(z.read('ml-25m/movies.csv'))\n\
           \n"
-        image: python:3.9
+        image: python:3.11
 pipelineInfo:
   description: A pipeline that retrieves data from movielens and ingests it into paraquet
     files on minio
@@ -553,4 +552,4 @@ root:
         isOptional: true
         parameterType: NUMBER_INTEGER
 schemaVersion: 2.1.0
-sdkVersion: kfp-2.10.1
+sdkVersion: kfp-2.11.0
